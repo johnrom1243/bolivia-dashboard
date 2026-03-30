@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js build
+.next/
+out/
+
+# Production
+build/
+
+# Env files — NEVER commit these
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Data files — parquet/JSON can be large; commit only if intentional
+data/*.parquet
+# data/bolivia_data.json  # uncomment to exclude JSON too (add separately via git add -f)
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Vercel
+.vercel

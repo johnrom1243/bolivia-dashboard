@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 94%;
+    --card: 222 47% 9%;
+    --card-foreground: 210 40% 94%;
+    --border: 220 20% 18%;
+    --input: 220 20% 14%;
+    --ring: 213 94% 60%;
+    --primary: 213 94% 60%;
+    --primary-foreground: 222 47% 6%;
+    --secondary: 220 20% 14%;
+    --secondary-foreground: 210 40% 94%;
+    --muted: 220 20% 14%;
+    --muted-foreground: 215 20% 55%;
+    --accent: 220 20% 18%;
+    --accent-foreground: 210 40% 94%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { @apply bg-transparent; }
+::-webkit-scrollbar-thumb { @apply bg-zinc-600 rounded-full; }
+::-webkit-scrollbar-thumb:hover { @apply bg-zinc-500; }
+
+/* Chart containers */
+.recharts-tooltip-wrapper { @apply text-xs; }
+.recharts-default-tooltip { @apply !bg-zinc-900 !border-zinc-700 !rounded-lg; }
+
+/* Transitions */
+.page-transition { @apply transition-opacity duration-150; }
+
+/* Gradient header */
+.gradient-header {
+  background: linear-gradient(135deg, #1E3A5F 0%, #1a3155 50%, #0f2340 100%);
+}
+
+/* KPI card glow */
+.kpi-glow { box-shadow: 0 0 20px rgba(59, 130, 246, 0.1); }
+
+/* Score bar */
+.score-bar {
+  @apply h-1.5 rounded-full bg-zinc-700;
+}
+.score-bar-fill {
+  @apply h-1.5 rounded-full transition-all duration-700;
+}
+
+/* Table zebra */
+.table-row-even { @apply bg-zinc-900; }
+.table-row-odd  { @apply bg-zinc-800/50; }
