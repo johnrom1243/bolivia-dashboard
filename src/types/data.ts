@@ -37,30 +37,60 @@ export interface KpiData {
   uniqueBuyers: number
   avgShipmentTons: number
   avgShipmentUsd: number
+  avgPricePerKg: number                        // NEW: weighted avg USD/kg
+  penfoldSharePct: number                      // NEW: Penfold % of market USD
+  dataDateRange: { min: string; max: string }  // NEW: freshness indicator
   yoyGrowthUsd: number | null
   yoyGrowthTons: number | null
-  topSuppliers: { name: string; usd: number; tons: number; share: number }[]
+  topSuppliers: { name: string; usd: number; tons: number; share: number; avgPriceKg: number }[]
   topBuyers: { name: string; usd: number; tons: number; share: number }[]
-  quarterlyTrend: { quarter: string; usd: number; tons: number; shipments: number }[]
+  quarterlyTrend: { quarter: string; usd: number; tons: number; shipments: number; avgPriceKg: number }[]
   topMovers: {
     name: string
     type: 'supplier' | 'buyer'
     currentUsd: number
     prevUsd: number
     change: number
+    usdDelta: number                           // NEW: absolute $ delta
   }[]
   rollingMetrics: {
     period: '30d' | '90d' | '180d'
     tons: number
     usd: number
     shipments: number
+    prevTons: number                           // NEW: previous equivalent period
+    prevUsd: number
+    prevShipments: number
+    changeTons: number                         // NEW: % vs prev period
+    changeUsd: number
+    changeShipments: number
   }[]
   marketHealth: {
-    hhi: number           // 0-10000, lower = more competitive
-    cr4: number           // top-4 concentration %
-    newEntrantRate: number // new suppliers last quarter %
+    hhi: number
+    cr4: number
+    newEntrantRate: number
+    newEntrantCount: number                    // NEW: absolute count
     score: 'Healthy' | 'Moderate' | 'Concentrated'
+    buyerCr4: number                           // NEW: buyer-side concentration
+    priceVolatilityPct: number                 // NEW: std dev of monthly avg price
   }
+  mineralBreakdown: {                          // NEW: per-mineral stats
+    mineral: string
+    usd: number
+    tons: number
+    share: number
+    shipments: number
+    avgPriceKg: number
+  }[]
+  monthlyTrend: {                              // NEW: month-by-month
+    date: string
+    usd: number
+    tons: number
+    shipments: number
+  }[]
+  priceByMineralQuarter: Record<string, number | string>[]  // NEW: { quarter, ZINC, TIN, ... }
+  gainers: { name: string; currentUsd: number; change: number; usdDelta: number }[]   // NEW
+  losers: { name: string; currentUsd: number; change: number; usdDelta: number }[]    // NEW
 }
 
 // ─── Loyalty analytics ─────────────────────────────────────────────────────
