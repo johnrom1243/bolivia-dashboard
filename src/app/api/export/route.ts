@@ -309,7 +309,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unknown export type' }, { status: 400 })
     }
 
-    return new NextResponse(buffer, {
+    return new NextResponse(buffer as unknown as BodyInit, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename="${filename}"`,

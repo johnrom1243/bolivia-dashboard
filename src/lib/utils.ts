@@ -67,5 +67,6 @@ export const MINERAL_COLORS: Record<string, string> = {
 }
 
 export function mineralColor(mineral: string): string {
-  return MINERAL_COLORS[mineral?.toUpperCase()] ?? CHART_COLORS[mineral?.charCodeAt(0) % CHART_COLORS.length ?? 0]
+  const idx = mineral ? mineral.charCodeAt(0) % CHART_COLORS.length : 0
+  return MINERAL_COLORS[mineral?.toUpperCase()] ?? CHART_COLORS[idx]
 }

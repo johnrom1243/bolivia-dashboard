@@ -131,10 +131,11 @@ export default function LoyaltyPage() {
               )
             }} />
             <Scatter data={data.slice(0, 80)}
-              shape={(props: Record<string, unknown>) => {
-                const r = props.payload as LoyaltyRow
+              shape={(props: unknown) => {
+                const p = props as Record<string, unknown>
+                const r = p.payload as LoyaltyRow
                 const color = r.trend === 'rising' ? '#10B981' : r.trend === 'falling' ? '#EF4444' : '#3B82F6'
-                return <circle cx={props.cx as number} cy={props.cy as number} r={6} fill={color} fillOpacity={0.7} />
+                return <circle cx={p.cx as number} cy={p.cy as number} r={6} fill={color} fillOpacity={0.7} />
               }}
             />
           </ScatterChart>

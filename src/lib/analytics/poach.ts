@@ -30,19 +30,16 @@ export function calculatePoachIndex(rows: DataRow[]): PoachRow[] {
   }
 
   // Annotate linkage on each row
-  const annotated = rows.map((r) => ({
-    ...r,
-    supplierRoot: getCorporateRoot(r.supplier),
-    buyerRoot: getCorporateRoot(r.buyer),
-  }))
-
-  annotated.forEach((r) => {
-    r.isLinked =
-      r.supplierRoot.length > 3 &&
-      r.buyerRoot.length > 3 &&
-      (r.supplierRoot.includes(r.buyerRoot) || r.buyerRoot.includes(r.supplierRoot))
-      ? 1
-      : 0
+  const annotated = rows.map((r) => {
+    const supplierRoot = getCorporateRoot(r.supplier)
+    const buyerRoot = getCorporateRoot(r.buyer)
+    const isLinked =
+      supplierRoot.length > 3 &&
+      buyerRoot.length > 3 &&
+      (supplierRoot.includes(buyerRoot) || buyerRoot.includes(supplierRoot))
+        ? 1
+        : 0
+    return { ...r, supplierRoot, buyerRoot, isLinked }
   })
 
   // ── Per-supplier stats ────────────────────────────────────────────────
@@ -167,7 +164,7 @@ interface RawStats {
   freqScore?: number
 }
 
-function groupBy<T extends Record<string, unknown>>(arr: T[], key: keyof T): Record<string, T[]> {
+function groupBy<T>(arr: T[], key: keyof T): Record<string, T[]> {
   const result: Record<string, T[]> = {}
   for (const item of arr) {
     const k = String(item[key])

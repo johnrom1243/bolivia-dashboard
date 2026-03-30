@@ -245,7 +245,7 @@ function buildScoreHistory(
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
-function groupBy<T extends Record<string, unknown>>(arr: T[], key: keyof T): Record<string, T[]> {
+function groupBy<T>(arr: T[], key: keyof T): Record<string, T[]> {
   const result: Record<string, T[]> = {}
   for (const item of arr) {
     const k = String(item[key])

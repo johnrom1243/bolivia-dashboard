@@ -49,11 +49,8 @@ export async function getData(): Promise<DataRow[]> {
               ),
             ),
         },
-        onChunk: ({ columnData, rowStart, rowEnd }: {
-          columnData: Record<string, unknown[]>
-          rowStart: number
-          rowEnd: number
-        }) => {
+        onChunk: (chunk: unknown) => {
+          const { columnData, rowStart, rowEnd } = chunk as { columnData: Record<string, unknown[]>; rowStart: number; rowEnd: number }
           const cols = Object.keys(columnData)
           const numRows = rowEnd - rowStart
           for (let i = 0; i < numRows; i++) {
@@ -66,7 +63,7 @@ export async function getData(): Promise<DataRow[]> {
         },
       })
 
-      _cache = normalise(rows as DataRow[])
+      _cache = normalise(rows as unknown as DataRow[])
       _cacheLoaded = true
       return _cache
     } catch (e) {
