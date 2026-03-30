@@ -143,25 +143,85 @@ export interface PredatorRow {
 }
 
 // ─── Supplier deep dive ────────────────────────────────────────────────────
+export interface BuyerMineralDetail {
+  mineral: string
+  tons: number
+  usd: number
+  kg: number
+  shipmentCount: number
+  firstDate: string
+  lastDate: string
+  avgUsdPerKg: number
+}
+
+export interface BuyerRelationship {
+  buyer: string
+  tons: number
+  usd: number
+  kg: number
+  share: number           // % of this supplier's total USD
+  shareOfWallet: number   // % of this buyer's total market purchases (all suppliers) that come from THIS supplier
+  firstDate: string
+  lastDate: string
+  daysSinceLast: number
+  shipmentCount: number
+  status: 'Active' | 'New' | 'Declining' | 'Dormant'
+  trend: 'growing' | 'stable' | 'declining'
+  avgUsdPerKg: number
+  minerals: BuyerMineralDetail[]
+}
+
 export interface SupplierProfile {
   name: string
   totalShipments: number
   totalTons: number
   totalUsd: number
+  totalKg: number
   uniqueBuyers: number
   firstShipment: string
   lastShipment: string
-  healthScore: number                       // NEW: 0-100 composite
-  momentumUsd: number                       // NEW: last 90d vs prev 90d %
-  peakQuarter: string                       // NEW
+  daysSinceLast: number
+  avgDaysBetweenShipments: number
+  healthScore: number
+  momentumUsd: number
+  peakQuarter: string
+  // Buyer relationships (rich)
+  buyerRelationships: BuyerRelationship[]
+  // Keep buyerShares for backward compat with charts
   buyerShares: { buyer: string; tons: number; usd: number; share: number; firstDate: string }[]
   quarterlyTimeline: { quarter: string; buyer: string; value: number }[]
-  mineralMix: { mineral: string; tons: number; usd: number; share: number }[]
+  monthlyTimeline: { date: string; usd: number; tons: number; shipments: number }[]
+  mineralMix: {
+    mineral: string
+    tons: number
+    usd: number
+    kg: number
+    share: number
+    avgPriceKg: number
+    marketAvgPriceKg: number
+    premiumPct: number       // % above/below market (positive = above)
+    buyers: string[]
+    shipmentCount: number
+  }[]
   priceVsMarket: { date: string; supplierPrice: number; marketPrice: number }[]
+  priceVsMarketByMineral: {
+    mineral: string
+    data: { date: string; supplierPrice: number; marketPrice: number }[]
+  }[]
   shipmentDistribution: { bucket: string; count: number }[]
-  aduanaUsage: { aduana: string; count: number; share: number }[]
-  seasonalPattern: { month: string; avgTons: number }[]  // NEW
-  competitorPresence: { buyer: string; otherSuppliers: string[] }[]  // NEW
+  aduanaUsage: { aduana: string; count: number; share: number; tons: number }[]
+  seasonalPattern: { month: string; avgTons: number; avgUsd: number; shipments: number }[]
+  competitorPresence: { buyer: string; otherSuppliers: string[] }[]
+  activityHeatmap: { year: number; month: number; count: number; tons: number }[]
+  recentTransactions: {
+    date: string
+    buyer: string
+    mineral: string
+    tons: number
+    usd: number
+    usdPerKg: number
+    aduana: string
+  }[]
 }
 
 // ─── Trader deep dive ──────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 'use client'
+import { useEffect, useRef } from 'react'
 import { useFilters } from '@/store/filters'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
@@ -7,6 +8,7 @@ const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov
 
 export function FilterPanel() {
   const f = useFilters()
+  const initialized = useRef(false)
 
   // Fetch distinct minerals + year range from a lightweight meta endpoint
   const { data: meta } = useQuery<{ minerals: string[]; yearMin: number; yearMax: number }>({
@@ -15,26 +17,49 @@ export function FilterPanel() {
     staleTime: Infinity,
   })
 
+  // Pre-select all minerals once on first load
+  useEffect(() => {
+    if (!meta || initialized.current) return
+    initialized.current = true
+    if (f.minerals.length === 0) {
+      f.setMinerals(meta.minerals)
+    }
+  }, [meta]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Build year options array
+  const yearOptions: number[] = []
+  if (meta) {
+    for (let y = meta.yearMin; y <= meta.yearMax; y++) yearOptions.push(y)
+  }
+
   return (
     <div className="flex flex-col gap-4 p-4 text-sm">
       {/* Year range */}
       <Section title="Year Range">
         <div className="flex gap-2">
-          <input
-            type="number"
-            className={inputCls}
-            placeholder={String(meta?.yearMin ?? 'From')}
-            value={f.yearMin ?? ''}
+          <select
+            className={selectCls}
+            disabled={!meta}
+            value={f.yearMin ?? meta?.yearMin ?? ''}
             onChange={(e) => f.setYearRange(e.target.value ? Number(e.target.value) : undefined, f.yearMax)}
-          />
+          >
+            {!meta && <option value="">From</option>}
+            {yearOptions.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
           <span className="text-zinc-500 self-center">–</span>
-          <input
-            type="number"
-            className={inputCls}
-            placeholder={String(meta?.yearMax ?? 'To')}
-            value={f.yearMax ?? ''}
+          <select
+            className={selectCls}
+            disabled={!meta}
+            value={f.yearMax ?? meta?.yearMax ?? ''}
             onChange={(e) => f.setYearRange(f.yearMin, e.target.value ? Number(e.target.value) : undefined)}
-          />
+          >
+            {!meta && <option value="">To</option>}
+            {yearOptions.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
         </div>
       </Section>
 
@@ -193,3 +218,8 @@ const inputCls =
   'w-full px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-white ' +
   'placeholder-zinc-500 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 ' +
   'focus:border-transparent transition-all'
+
+const selectCls =
+  'w-full px-2 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-white ' +
+  'text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 ' +
+  'focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed'

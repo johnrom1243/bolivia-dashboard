@@ -279,6 +279,276 @@ export async function GET(req: NextRequest) {
       })
       filename = 'market_evolution.xlsx'
 
+    } else if (type === 'supplier') {
+      const supplierName = params.get('supplier') ?? ''
+      if (!supplierName) {
+        return NextResponse.json({ error: 'supplier param required' }, { status: 400 })
+      }
+      const sub = filtered.filter((r) => r.supplier === supplierName)
+      if (!sub.length) {
+        return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
+      }
+      const todayMsS = Date.now()
+
+      // KPI totals
+      const sTotalUsd = sub.reduce((a, r) => a + r.usd, 0)
+      const sTotalTons = sub.reduce((a, r) => a + r.tons, 0)
+      const sTotalKg = sub.reduce((a, r) => a + r.kg, 0)
+      const sDates = sub.map((r) => r.Date).sort()
+      const sFirstShipment = sDates[0]
+      const sLastShipment = sDates[sDates.length - 1]
+      const sDaysSinceLast = Math.round((todayMsS - new Date(sLastShipment).getTime()) / 86400000)
+
+      // Health score
+      const sRecentTons = sub.filter((r) => new Date(r.Date).getTime() >= todayMsS - 90 * 86400000).reduce((a, r) => a + r.tons, 0)
+      const sPrevTons = sub.filter((r) => {
+        const t = new Date(r.Date).getTime()
+        return t >= todayMsS - 180 * 86400000 && t < todayMsS - 90 * 86400000
+      }).reduce((a, r) => a + r.tons, 0)
+      const sMomentum = sPrevTons > 0 ? ((sRecentTons - sPrevTons) / sPrevTons) * 100 : 0
+      const sRecencyScore = Math.max(0, 100 - sDaysSinceLast / 3)
+      const sBuyerSet = new Set(sub.map((r) => r.buyer))
+      const sDiversityScore = Math.min(100, sBuyerSet.size * 20)
+      const sVolumeScore = Math.min(100, Math.log1p(sTotalTons) * 10)
+      const sHealthScore = Math.min(100, Math.max(0, Math.round(sRecencyScore * 0.4 + sDiversityScore * 0.3 + sVolumeScore * 0.3)))
+
+      // Sheet 1: Summary
+      const summaryRows = [
+        { metric: 'Supplier', value: supplierName },
+        { metric: 'Total USD', value: Math.round(sTotalUsd) },
+        { metric: 'Total Tons', value: Math.round(sTotalTons * 100) / 100 },
+        { metric: 'Total KG', value: Math.round(sTotalKg) },
+        { metric: 'Total Shipments', value: sub.length },
+        { metric: 'Unique Buyers', value: sBuyerSet.size },
+        { metric: 'First Shipment', value: sFirstShipment },
+        { metric: 'Last Shipment', value: sLastShipment },
+        { metric: 'Days Since Last', value: sDaysSinceLast },
+        { metric: 'Health Score', value: sHealthScore },
+        { metric: '90d Momentum %', value: Math.round(sMomentum * 10) / 10 },
+      ]
+      const sheet1: import('@/lib/export').SheetDef = {
+        name: 'Summary',
+        title: `Supplier Profile — ${supplierName}`,
+        columns: [
+          { header: 'Metric', key: 'metric', width: 28 },
+          { header: 'Value', key: 'value', width: 24 },
+        ],
+        rows: summaryRows as Record<string, unknown>[],
+      }
+
+      // Buyer map
+      const sBuyerMap: Record<string, {
+        tons: number; usd: number; kg: number; count: number; firstDate: string; lastDate: string
+      }> = {}
+      for (const r of sub) {
+        if (!sBuyerMap[r.buyer]) sBuyerMap[r.buyer] = { tons: 0, usd: 0, kg: 0, count: 0, firstDate: r.Date, lastDate: r.Date }
+        sBuyerMap[r.buyer].tons += r.tons; sBuyerMap[r.buyer].usd += r.usd; sBuyerMap[r.buyer].kg += r.kg; sBuyerMap[r.buyer].count++
+        if (r.Date < sBuyerMap[r.buyer].firstDate) sBuyerMap[r.buyer].firstDate = r.Date
+        if (r.Date > sBuyerMap[r.buyer].lastDate) sBuyerMap[r.buyer].lastDate = r.Date
+      }
+      // Buyer total market
+      const sBuyerTotalMarket: Record<string, number> = {}
+      for (const r of all) sBuyerTotalMarket[r.buyer] = (sBuyerTotalMarket[r.buyer] || 0) + r.usd
+
+      // Sheet 2: Buyer Relationships
+      const t90s = todayMsS - 90 * 86400000
+      const t180s = todayMsS - 180 * 86400000
+      const sheet2Rows = Object.entries(sBuyerMap)
+        .sort((a, b) => b[1].usd - a[1].usd)
+        .map(([buyer, v]) => {
+          const daysSince = Math.round((todayMsS - new Date(v.lastDate).getTime()) / 86400000)
+          const firstMs = new Date(v.firstDate).getTime()
+          const monthsOld = (todayMsS - firstMs) / (86400000 * 30)
+          let status: string
+          if (monthsOld < 6 && daysSince < 90) status = 'New'
+          else if (daysSince < 90) status = 'Active'
+          else if (daysSince < 180) status = 'Declining'
+          else status = 'Dormant'
+          const buyerSub = sub.filter((r) => r.buyer === buyer)
+          const recentUsd = buyerSub.filter((r) => new Date(r.Date).getTime() >= t90s).reduce((a, r) => a + r.usd, 0)
+          const prevUsd = buyerSub.filter((r) => { const t = new Date(r.Date).getTime(); return t >= t180s && t < t90s }).reduce((a, r) => a + r.usd, 0)
+          let trend = 'stable'
+          if (prevUsd > 0) { const pct = (recentUsd - prevUsd) / prevUsd * 100; if (pct > 10) trend = 'growing'; else if (pct < -10) trend = 'declining' }
+          return {
+            buyer,
+            usd: Math.round(v.usd),
+            tons: Math.round(v.tons * 100) / 100,
+            kg: Math.round(v.kg),
+            sharePct: sTotalUsd > 0 ? Math.round((v.usd / sTotalUsd) * 1000) / 10 : 0,
+            shareOfWalletPct: sBuyerTotalMarket[buyer] > 0 ? Math.round((v.usd / sBuyerTotalMarket[buyer]) * 1000) / 10 : 0,
+            firstDate: v.firstDate,
+            lastDate: v.lastDate,
+            daysSinceLast: daysSince,
+            status,
+            trend,
+            shipmentCount: v.count,
+            avgUsdPerKg: v.kg > 0 ? Math.round((v.usd / v.kg) * 1000) / 1000 : 0,
+          }
+        })
+      const sheet2: import('@/lib/export').SheetDef = {
+        name: 'Buyer Relationships',
+        title: 'Buyer Relationships',
+        columns: [
+          { header: 'Buyer', key: 'buyer', width: 32 },
+          { header: 'USD', key: 'usd', width: 16 },
+          { header: 'Tons', key: 'tons', width: 14 },
+          { header: 'KG', key: 'kg', width: 14 },
+          { header: 'Share %', key: 'sharePct', width: 12 },
+          { header: 'Wallet Share %', key: 'shareOfWalletPct', width: 16 },
+          { header: 'First Date', key: 'firstDate', width: 14 },
+          { header: 'Last Date', key: 'lastDate', width: 14 },
+          { header: 'Days Since Last', key: 'daysSinceLast', width: 16 },
+          { header: 'Status', key: 'status', width: 12 },
+          { header: 'Trend', key: 'trend', width: 12 },
+          { header: 'Shipments', key: 'shipmentCount', width: 12 },
+          { header: 'Avg USD/KG', key: 'avgUsdPerKg', width: 14 },
+        ],
+        rows: sheet2Rows as Record<string, unknown>[],
+      }
+
+      // Sheet 3: Buyer × Mineral
+      const sBuyerMineralMap: Record<string, Record<string, { tons: number; usd: number; kg: number; count: number; firstDate: string; lastDate: string }>> = {}
+      for (const r of sub) {
+        if (!sBuyerMineralMap[r.buyer]) sBuyerMineralMap[r.buyer] = {}
+        if (!sBuyerMineralMap[r.buyer][r.mineral]) sBuyerMineralMap[r.buyer][r.mineral] = { tons: 0, usd: 0, kg: 0, count: 0, firstDate: r.Date, lastDate: r.Date }
+        const bm = sBuyerMineralMap[r.buyer][r.mineral]
+        bm.tons += r.tons; bm.usd += r.usd; bm.kg += r.kg; bm.count++
+        if (r.Date < bm.firstDate) bm.firstDate = r.Date
+        if (r.Date > bm.lastDate) bm.lastDate = r.Date
+      }
+      const sheet3Rows = Object.entries(sBuyerMineralMap).flatMap(([buyer, minerals]) =>
+        Object.entries(minerals).map(([mineral, bm]) => ({
+          buyer, mineral,
+          tons: Math.round(bm.tons * 100) / 100,
+          usd: Math.round(bm.usd),
+          kg: Math.round(bm.kg),
+          shipments: bm.count,
+          firstDate: bm.firstDate,
+          lastDate: bm.lastDate,
+          avgUsdPerKg: bm.kg > 0 ? Math.round((bm.usd / bm.kg) * 1000) / 1000 : 0,
+        }))
+      ).sort((a, b) => b.usd - a.usd)
+      const sheet3: import('@/lib/export').SheetDef = {
+        name: 'Buyer x Mineral',
+        title: 'Buyer × Mineral Detail',
+        columns: [
+          { header: 'Buyer', key: 'buyer', width: 32 },
+          { header: 'Mineral', key: 'mineral', width: 18 },
+          { header: 'Tons', key: 'tons', width: 14 },
+          { header: 'USD', key: 'usd', width: 16 },
+          { header: 'KG', key: 'kg', width: 14 },
+          { header: 'Shipments', key: 'shipments', width: 12 },
+          { header: 'First Date', key: 'firstDate', width: 14 },
+          { header: 'Last Date', key: 'lastDate', width: 14 },
+          { header: 'Avg USD/KG', key: 'avgUsdPerKg', width: 14 },
+        ],
+        rows: sheet3Rows as Record<string, unknown>[],
+      }
+
+      // Sheet 4: Mineral Mix
+      const sMineralMap: Record<string, { tons: number; usd: number; kg: number; count: number; buyers: Set<string> }> = {}
+      for (const r of sub) {
+        if (!sMineralMap[r.mineral]) sMineralMap[r.mineral] = { tons: 0, usd: 0, kg: 0, count: 0, buyers: new Set() }
+        sMineralMap[r.mineral].tons += r.tons; sMineralMap[r.mineral].usd += r.usd; sMineralMap[r.mineral].kg += r.kg; sMineralMap[r.mineral].count++
+        sMineralMap[r.mineral].buyers.add(r.buyer)
+      }
+      const sMarketMineralPrice: Record<string, { sum: number; count: number }> = {}
+      for (const r of all) {
+        if (!sMarketMineralPrice[r.mineral]) sMarketMineralPrice[r.mineral] = { sum: 0, count: 0 }
+        if (r.usd_per_kg > 0) { sMarketMineralPrice[r.mineral].sum += r.usd_per_kg; sMarketMineralPrice[r.mineral].count++ }
+      }
+      const sheet4Rows = Object.entries(sMineralMap)
+        .sort((a, b) => b[1].tons - a[1].tons)
+        .map(([mineral, v]) => {
+          const avgPriceKg = v.kg > 0 ? v.usd / v.kg : 0
+          const mktData = sMarketMineralPrice[mineral]
+          const marketAvgPriceKg = mktData?.count > 0 ? mktData.sum / mktData.count : 0
+          const premiumPct = marketAvgPriceKg > 0 ? ((avgPriceKg - marketAvgPriceKg) / marketAvgPriceKg) * 100 : 0
+          return {
+            mineral,
+            tons: Math.round(v.tons * 100) / 100,
+            usd: Math.round(v.usd),
+            kg: Math.round(v.kg),
+            sharePct: sTotalTons > 0 ? Math.round((v.tons / sTotalTons) * 1000) / 10 : 0,
+            avgPriceKg: Math.round(avgPriceKg * 1000) / 1000,
+            marketAvgPriceKg: Math.round(marketAvgPriceKg * 1000) / 1000,
+            premiumPct: Math.round(premiumPct * 10) / 10,
+            shipmentCount: v.count,
+            buyers: [...v.buyers].join(', '),
+          }
+        })
+      const sheet4: import('@/lib/export').SheetDef = {
+        name: 'Mineral Mix',
+        title: 'Mineral Mix',
+        columns: [
+          { header: 'Mineral', key: 'mineral', width: 18 },
+          { header: 'Tons', key: 'tons', width: 14 },
+          { header: 'USD', key: 'usd', width: 16 },
+          { header: 'KG', key: 'kg', width: 14 },
+          { header: 'Share %', key: 'sharePct', width: 12 },
+          { header: 'Avg Price/KG', key: 'avgPriceKg', width: 16 },
+          { header: 'Market Avg/KG', key: 'marketAvgPriceKg', width: 16 },
+          { header: 'Premium %', key: 'premiumPct', width: 14 },
+          { header: 'Shipments', key: 'shipmentCount', width: 12 },
+          { header: 'Buyers', key: 'buyers', width: 50 },
+        ],
+        rows: sheet4Rows as Record<string, unknown>[],
+      }
+
+      // Sheet 5: Monthly Timeline
+      const sMonthlyMap: Record<string, { usd: number; tons: number; shipments: number }> = {}
+      for (const r of sub) {
+        const mo = r.Date.slice(0, 7)
+        if (!sMonthlyMap[mo]) sMonthlyMap[mo] = { usd: 0, tons: 0, shipments: 0 }
+        sMonthlyMap[mo].usd += r.usd; sMonthlyMap[mo].tons += r.tons; sMonthlyMap[mo].shipments++
+      }
+      const sheet5Rows = Object.entries(sMonthlyMap)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, v]) => ({ date, usd: Math.round(v.usd), tons: Math.round(v.tons * 100) / 100, shipments: v.shipments }))
+      const sheet5: import('@/lib/export').SheetDef = {
+        name: 'Monthly Timeline',
+        title: 'Monthly Timeline',
+        columns: [
+          { header: 'Month', key: 'date', width: 14 },
+          { header: 'USD', key: 'usd', width: 16 },
+          { header: 'Tons', key: 'tons', width: 14 },
+          { header: 'Shipments', key: 'shipments', width: 12 },
+        ],
+        rows: sheet5Rows as Record<string, unknown>[],
+      }
+
+      // Sheet 6: Transactions
+      const sheet6Rows = [...sub]
+        .sort((a, b) => b.Date.localeCompare(a.Date))
+        .map((r) => ({
+          date: r.Date,
+          buyer: r.buyer,
+          mineral: r.mineral,
+          tons: Math.round(r.tons * 100) / 100,
+          usd: Math.round(r.usd),
+          kg: Math.round(r.kg),
+          usdPerKg: Math.round(r.usd_per_kg * 1000) / 1000,
+          aduana: r.aduana ?? '',
+        }))
+      const sheet6: import('@/lib/export').SheetDef = {
+        name: 'Transactions',
+        title: 'All Transactions',
+        columns: [
+          { header: 'Date', key: 'date', width: 14 },
+          { header: 'Buyer', key: 'buyer', width: 32 },
+          { header: 'Mineral', key: 'mineral', width: 18 },
+          { header: 'Tons', key: 'tons', width: 14 },
+          { header: 'USD', key: 'usd', width: 16 },
+          { header: 'KG', key: 'kg', width: 14 },
+          { header: 'USD/KG', key: 'usdPerKg', width: 14 },
+          { header: 'Customs Post', key: 'aduana', width: 24 },
+        ],
+        rows: sheet6Rows as Record<string, unknown>[],
+      }
+
+      buffer = await buildWorkbook([sheet1, sheet2, sheet3, sheet4, sheet5, sheet6])
+      filename = `supplier_${supplierName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`
+
     } else if (type === 'logistics') {
       const routeMap2: Record<string, { sum: number; n: number }> = {}
       for (const r of filtered) {
