@@ -18,14 +18,17 @@ export async function GET(req: NextRequest) {
     const filters = parseFilters(params)
     const filtered = applyFilters(all, filters)
 
+    // Use latest data date as reference "today" so activity windows are meaningful
+    const refMs = Math.max(...all.map((r) => new Date(r.Date).getTime()))
+
     let data: unknown
 
     if (type === 'loyalty') {
-      data = calculateLoyaltyIndex(filtered)
+      data = calculateLoyaltyIndex(filtered, refMs)
     } else if (type === 'poach') {
-      data = calculatePoachIndex(filtered)
+      data = calculatePoachIndex(filtered, refMs)
     } else if (type === 'predator') {
-      data = runPredatorModel(filtered, mineral)
+      data = runPredatorModel(filtered, mineral, refMs)
     } else {
       return NextResponse.json({ error: 'Unknown analytics type' }, { status: 400 })
     }

@@ -15,6 +15,10 @@ export async function GET(req: NextRequest) {
     const allDates = filtered.map((r) => r.Date).sort()
     const dataDateRange = { min: allDates[0], max: allDates[allDates.length - 1] }
 
+    // ── Reference date = latest date in dataset (not wall-clock today) ────────
+    const refMs = Math.max(...all.map((r) => new Date(r.Date).getTime()))
+    const refDate = new Date(refMs)
+
     // ── YoY calculation ───────────────────────────────────────────────────────
     const years = [...new Set(filtered.map((r) => r.year))].sort()
     const currentYear = years[years.length - 1]
@@ -22,8 +26,7 @@ export async function GET(req: NextRequest) {
     const currentYearRows = filtered.filter((r) => r.year === currentYear)
     const prevYearRows = all.filter((r) => r.year === prevYear)
 
-    const today = new Date()
-    const isIncomplete = currentYear === today.getFullYear() && today.getMonth() < 11
+    const isIncomplete = currentYear === refDate.getFullYear() && refDate.getMonth() < 11
     const maxMonth = Math.max(...currentYearRows.map((r) => r.month_num))
     const prevComparableRows = isIncomplete
       ? prevYearRows.filter((r) => r.month_num <= maxMonth)
@@ -177,7 +180,7 @@ export async function GET(req: NextRequest) {
       .map(({ name, currentUsd, change, usdDelta }) => ({ name, currentUsd, change, usdDelta }))
 
     // ── Rolling metrics with period-over-period comparison ────────────────────
-    const todayMs = Date.now()
+    const todayMs = refMs
     const rollingMetrics = ([30, 90, 180] as const).map((days) => {
       const cutMs = todayMs - days * 86400000
       const prevCutMs = cutMs - days * 86400000

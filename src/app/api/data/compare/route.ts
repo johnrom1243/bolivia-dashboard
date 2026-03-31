@@ -15,6 +15,8 @@ export async function GET(req: NextRequest) {
     const filters = parseFilters(params)
     const filtered = applyFilters(all, filters)
 
+    const refMs = Math.max(...all.map((r) => new Date(r.Date).getTime()))
+
     function profileBuyer(name: string) {
       const rows = filtered.filter((r) => r.buyer === name)
       if (!rows.length) return null
@@ -91,7 +93,7 @@ export async function GET(req: NextRequest) {
 
       const firstShipment = rows.map((r) => r.Date).sort()[0]
       const lastShipment = rows.map((r) => r.Date).sort().at(-1)!
-      const daysSinceLast = (Date.now() - new Date(lastShipment).getTime()) / 86400000
+      const daysSinceLast = (refMs - new Date(lastShipment).getTime()) / 86400000
 
       return {
         name,

@@ -16,8 +16,8 @@ export async function GET(req: NextRequest) {
     const mineralRows = mineral ? filtered.filter((r) => r.mineral === mineral) : filtered
     if (!mineralRows.length) return NextResponse.json([])
 
-    const todayMs = Date.now()
-    const currentYear = new Date().getFullYear()
+    const todayMs = Math.max(...all.map((r) => new Date(r.Date).getTime()))
+    const currentYear = new Date(todayMs).getFullYear()
 
     // Market avg price for this mineral
     const marketPrices = mineralRows.filter((r) => r.usd_per_kg > 0).map((r) => r.usd_per_kg)

@@ -13,8 +13,10 @@
 import type { DataRow, LoyaltyRow } from '@/types/data'
 import { linregress } from '@/lib/db'
 
-export function calculateLoyaltyIndex(rows: DataRow[]): LoyaltyRow[] {
+export function calculateLoyaltyIndex(rows: DataRow[], refMs?: number): LoyaltyRow[] {
   if (!rows.length) return []
+
+  const nowMs = refMs ?? Math.max(...rows.map((r) => new Date(r.Date).getTime()))
 
   // Group by supplier
   const bySupplier = groupBy(rows, 'supplier')
@@ -61,7 +63,7 @@ export function calculateLoyaltyIndex(rows: DataRow[]): LoyaltyRow[] {
 
     // ── NEW: 6-month trend ────────────────────────────────────────────────
     // Calculate monthly primary-buyer share over last 6 months
-    const sixMonthsAgo = Date.now() - 180 * 24 * 60 * 60 * 1000
+    const sixMonthsAgo = nowMs - 180 * 24 * 60 * 60 * 1000
     const recentGroup = group.filter(
       (r) => new Date(r.Date).getTime() >= sixMonthsAgo,
     )

@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
       .filter(([, date]) => !cutoffDate || date >= cutoffDate)
       .map(([supplier, firstDate]) => supplier)
 
-    const todayMs = Date.now()
+    const todayMs = Math.max(...all.map((r) => new Date(r.Date).getTime()))
     const results: NewSupplierRow[] = []
 
     for (const supplier of newSuppliers) {

@@ -36,7 +36,8 @@ export async function GET(req: NextRequest) {
     const sub = filtered.filter((r) => r.buyer === buyerName)
     if (!sub.length) return NextResponse.json(null)
 
-    const todayMs = Date.now()
+    // Use latest data date as reference "today" so recency/windows are meaningful
+    const todayMs = Math.max(...all.map((r) => new Date(r.Date).getTime()))
     const totalTons = sub.reduce((a, r) => a + r.tons, 0)
     const totalUsd = sub.reduce((a, r) => a + r.usd, 0)
     const totalKg = sub.reduce((a, r) => a + r.kg, 0)

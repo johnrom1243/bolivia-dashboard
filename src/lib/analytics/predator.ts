@@ -15,11 +15,11 @@ import { shannonEntropy, gammaCdf, fitGamma, linregress } from '@/lib/db'
 const ZOMBIE_DAYS = 455   // 15 months
 const RECENT_MONTHS = 3   // market benchmark window
 
-export function runPredatorModel(rows: DataRow[], mineral: string): PredatorRow[] {
+export function runPredatorModel(rows: DataRow[], mineral: string, refMs?: number): PredatorRow[] {
   const mineralRows = rows.filter((r) => r.mineral === mineral)
   if (!mineralRows.length) return []
 
-  const today = Date.now()
+  const today = refMs ?? Math.max(...mineralRows.map((r) => new Date(r.Date).getTime()))
 
   // ── Market growth benchmark ────────────────────────────────────────────
   const recentCutMs = today - RECENT_MONTHS * 30 * 86400000

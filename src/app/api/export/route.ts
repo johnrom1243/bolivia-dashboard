@@ -26,6 +26,9 @@ export async function GET(req: NextRequest) {
     const filters = parseFilters(params)
     const filtered = applyFilters(all, filters)
 
+    // Use latest data date as reference "today" so recency/windows are meaningful
+    const refMs = Math.max(...all.map((r) => new Date(r.Date).getTime()))
+
     let buffer: Buffer
     let filename = 'bolivia_export.xlsx'
 
@@ -34,17 +37,17 @@ export async function GET(req: NextRequest) {
       filename = 'bolivia_raw_data.xlsx'
 
     } else if (type === 'loyalty') {
-      const data = calculateLoyaltyIndex(filtered)
+      const data = calculateLoyaltyIndex(filtered, refMs)
       buffer = await buildSingleSheet(loyaltySheet(data as unknown as Record<string, unknown>[]))
       filename = 'supplier_loyalty_analysis.xlsx'
 
     } else if (type === 'poach') {
-      const data = calculatePoachIndex(filtered)
+      const data = calculatePoachIndex(filtered, refMs)
       buffer = await buildSingleSheet(poachSheet(data as unknown as Record<string, unknown>[]))
       filename = 'poach_index_rankings.xlsx'
 
     } else if (type === 'predator') {
-      const data = runPredatorModel(filtered, mineral)
+      const data = runPredatorModel(filtered, mineral, refMs)
       buffer = await buildSingleSheet(predatorSheet(data as unknown as Record<string, unknown>[]))
       filename = `predator_targets_${mineral}.xlsx`
 
@@ -75,7 +78,6 @@ export async function GET(req: NextRequest) {
       // Full supplier × mineral breakdown for a specific buyer — the "boss report"
       const buyerName = params.get('buyer') ?? ''
       const sub = buyerName ? filtered.filter((r) => r.buyer === buyerName) : filtered
-      const todayMs = Date.now()
 
       // Group by supplier × mineral
       const smMap: Record<string, Record<string, {
@@ -107,7 +109,7 @@ export async function GET(req: NextRequest) {
             avgUsdPerKg: v.kg > 0 ? Math.round((v.usd / v.kg) * 1000) / 1000 : 0,
             firstDelivery: v.firstDate,
             lastDelivery: v.lastDate,
-            daysSinceLast: Math.round((todayMs - new Date(v.lastDate).getTime()) / 86400000),
+            daysSinceLast: Math.round((refMs - new Date(v.lastDate).getTime()) / 86400000),
           })),
         )
         .sort((a, b) => b.lastDelivery.localeCompare(a.lastDelivery))
@@ -135,7 +137,6 @@ export async function GET(req: NextRequest) {
     } else if (type === 'mineral') {
       const mineralName = params.get('mineral') ?? ''
       const sub = mineralName ? filtered.filter((r) => r.mineral === mineralName) : filtered
-      const todayMs = Date.now()
       const supplierMap: Record<string, { tons: number; usd: number; count: number; firstSeen: string; lastSeen: string; latestBuyer: string }> = {}
       for (const r of sub) {
         if (!supplierMap[r.supplier]) supplierMap[r.supplier] = { tons: 0, usd: 0, count: 0, firstSeen: r.Date, lastSeen: r.Date, latestBuyer: r.buyer }
@@ -148,7 +149,7 @@ export async function GET(req: NextRequest) {
       const rows = Object.entries(supplierMap).map(([supplier, v]) => ({
         supplier,
         latestBuyer: v.latestBuyer,
-        daysInactive: Math.round((todayMs - new Date(v.lastSeen).getTime()) / 86400000),
+        daysInactive: Math.round((refMs - new Date(v.lastSeen).getTime()) / 86400000),
         totalTons: v.tons,
         totalUsd: v.usd,
         shipmentCount: v.count,
@@ -212,7 +213,7 @@ export async function GET(req: NextRequest) {
       const newSupplierNames = Object.entries(firstEverDate)
         .filter(([, d]) => !cutoffDate || d >= cutoffDate)
         .map(([s]) => s)
-      const todayMs2 = Date.now()
+      const todayMs2 = refMs
       const nsRows = newSupplierNames.flatMap((supplier) => {
         const rows2 = filtered.filter((r) => r.supplier === supplier)
         if (!rows2.length) return []
@@ -288,7 +289,7 @@ export async function GET(req: NextRequest) {
       if (!sub.length) {
         return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
       }
-      const todayMsS = Date.now()
+      const todayMsS = refMs
 
       // KPI totals
       const sTotalUsd = sub.reduce((a, r) => a + r.usd, 0)
@@ -558,7 +559,7 @@ export async function GET(req: NextRequest) {
       if (!sub.length) {
         return NextResponse.json({ error: 'Buyer not found' }, { status: 404 })
       }
-      const todayMsB = Date.now()
+      const todayMsB = refMs
 
       // Totals
       const bTotalUsd = sub.reduce((a, r) => a + r.usd, 0)

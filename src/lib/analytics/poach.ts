@@ -11,10 +11,10 @@
  */
 import type { DataRow, PoachRow } from '@/types/data'
 
-export function calculatePoachIndex(rows: DataRow[]): PoachRow[] {
+export function calculatePoachIndex(rows: DataRow[], refMs?: number): PoachRow[] {
   if (!rows.length) return []
 
-  const today = Date.now()
+  const today = refMs ?? Math.max(...rows.map((r) => new Date(r.Date).getTime()))
 
   // ── Corporate root extraction (same logic as Python) ──────────────────
   function getCorporateRoot(name: string): string {
