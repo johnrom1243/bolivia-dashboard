@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useFilters } from '@/store/filters'
 import { ExportButton } from '@/components/ExportButton'
 import { fmtTons, cn } from '@/lib/utils'
+import { InfoTooltip } from '@/components/InfoTooltip'
+import { G } from '@/lib/glossary'
 import type { PredatorRow } from '@/types/data'
 import {
   ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, ZAxis,
@@ -163,8 +165,12 @@ export default function PredatorPage() {
                   <thead className="sticky top-0 bg-zinc-900 border-b border-zinc-800">
                     <tr className="text-zinc-500">
                       <th className="text-left px-4 py-2 font-medium">Supplier</th>
-                      <th className="text-right px-4 py-2 font-medium">Score</th>
-                      <th className="text-right px-4 py-2 font-medium">Silent</th>
+                      <th className="text-right px-4 py-2 font-medium">
+                        <span className="flex items-center justify-end gap-0.5">Score <InfoTooltip {...G.predatorScore} /></span>
+                      </th>
+                      <th className="text-right px-4 py-2 font-medium">
+                        <span className="flex items-center justify-end gap-0.5">Silent <InfoTooltip {...G.zombieGuard} /></span>
+                      </th>
                       <th className="text-left px-4 py-2 font-medium">Weakness</th>
                     </tr>
                   </thead>
@@ -221,14 +227,14 @@ export default function PredatorPage() {
                   {/* Component breakdown */}
                   <div className="mt-4 space-y-2">
                     {[
-                      { label: 'Loyalty Decay', value: selectedSupplier.loyaltyDecay, max: 1, color: '#EF4444' },
-                      { label: 'Cash Stress', value: selectedSupplier.stressIndex, max: 1, color: '#F59E0B' },
-                      { label: 'Network Entropy', value: selectedSupplier.entropy / 2.5, max: 1, color: '#8B5CF6' },
-                      { label: 'Peer Gap', value: Math.min(selectedSupplier.peerPerformanceGap, 1), max: 1, color: '#3B82F6' },
-                      { label: 'Churn Risk', value: selectedSupplier.churnRisk, max: 1, color: '#F97316' },
+                      { label: 'Loyalty Decay', value: selectedSupplier.loyaltyDecay, max: 1, color: '#EF4444', info: G.loyaltyDecay },
+                      { label: 'Cash Stress', value: selectedSupplier.stressIndex, max: 1, color: '#F59E0B', info: G.cashStress },
+                      { label: 'Network Entropy', value: selectedSupplier.entropy / 2.5, max: 1, color: '#8B5CF6', info: G.networkEntropy },
+                      { label: 'Peer Gap', value: Math.min(selectedSupplier.peerPerformanceGap, 1), max: 1, color: '#3B82F6', info: G.peerGap },
+                      { label: 'Churn Risk', value: selectedSupplier.churnRisk, max: 1, color: '#F97316', info: G.churnRisk },
                     ].map((c) => (
                       <div key={c.label} className="flex items-center gap-2 text-xs">
-                        <span className="text-zinc-500 w-28">{c.label}</span>
+                        <span className="text-zinc-500 w-28 flex items-center gap-0.5">{c.label} <InfoTooltip {...c.info} /></span>
                         <div className="flex-1 h-1.5 rounded-full bg-zinc-800">
                           <div className="h-1.5 rounded-full" style={{ width: `${Math.min(c.value, 1) * 100}%`, background: c.color }} />
                         </div>

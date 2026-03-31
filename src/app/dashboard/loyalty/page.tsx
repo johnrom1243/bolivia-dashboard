@@ -3,7 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import { useFilters } from '@/store/filters'
 import { ExportButton } from '@/components/ExportButton'
 import { KpiCard } from '@/components/KpiCard'
+import { InfoTooltip } from '@/components/InfoTooltip'
 import { fmtTons, fmtUsd, cn } from '@/lib/utils'
+import { G } from '@/lib/glossary'
 import type { LoyaltyRow } from '@/types/data'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -56,12 +58,12 @@ export default function LoyaltyPage() {
       </div>
 
       <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
-        <KpiCard label="Avg Loyalty" value={avg.toFixed(1)} icon="🤝" accent="blue" />
-        <KpiCard label="Highly Loyal" value={String(highlyLoyal.length)} subValue="> 70" accent="green" />
-        <KpiCard label="Moderate" value={String(moderate.length)} subValue="40 – 70" accent="amber" />
-        <KpiCard label="Low Loyalty" value={String(lowLoyal.length)} subValue="< 40" accent="red" />
-        <KpiCard label="At Risk" value={String(atRisk.length)} subValue="loyal but declining" accent="red" />
-        <KpiCard label="Rising Trend" value={String(rising.length)} subValue="growing loyalty" accent="green" />
+        <KpiCard label="Avg Loyalty" value={avg.toFixed(1)} icon="🤝" accent="blue" info={G.loyaltyIndex} />
+        <KpiCard label="Highly Loyal" value={String(highlyLoyal.length)} subValue="> 70" accent="green" info={G.loyaltyIndex} />
+        <KpiCard label="Moderate" value={String(moderate.length)} subValue="40 – 70" accent="amber" info={G.loyaltyIndex} />
+        <KpiCard label="Low Loyalty" value={String(lowLoyal.length)} subValue="< 40" accent="red" info={G.loyaltyIndex} />
+        <KpiCard label="At Risk" value={String(atRisk.length)} subValue="loyal but declining" accent="red" info={G.atRisk} />
+        <KpiCard label="Rising Trend" value={String(rising.length)} subValue="growing loyalty" accent="green" info={G.loyaltyTrend} />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -167,8 +169,12 @@ export default function LoyaltyPage() {
                 <tr className="border-b border-zinc-800 text-zinc-500">
                   <th className="text-left px-4 py-3 font-medium">Supplier</th>
                   <th className="text-left px-4 py-3 font-medium">Primary Buyer</th>
-                  <th className="text-right px-4 py-3 font-medium">Loyalty Score</th>
-                  <th className="text-right px-4 py-3 font-medium">Buyer Share</th>
+                  <th className="text-right px-4 py-3 font-medium">
+                    <span className="flex items-center justify-end gap-0.5">Loyalty Score <InfoTooltip {...G.loyaltyIndex} /></span>
+                  </th>
+                  <th className="text-right px-4 py-3 font-medium">
+                    <span className="flex items-center justify-end gap-0.5">Buyer Share <InfoTooltip term="Primary Buyer Share" what="The share of this supplier's total volume that goes to their primary (largest) buyer. High % = highly dependent on one buyer." calc="Primary buyer tons ÷ Total supplier tons × 100" /></span>
+                  </th>
                   <th className="text-right px-4 py-3 font-medium">Volume</th>
                 </tr>
               </thead>

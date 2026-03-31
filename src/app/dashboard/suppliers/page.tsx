@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useFilters } from '@/store/filters'
 import { ExportButton } from '@/components/ExportButton'
+import { InfoTooltip } from '@/components/InfoTooltip'
+import { G } from '@/lib/glossary'
 import { fmtUsd, fmtTons, fmtNum, cn, mineralColor } from '@/lib/utils'
 import type { SupplierProfile, BuyerRelationship } from '@/types/data'
 import {
@@ -39,10 +41,16 @@ function trendIcon(trend: BuyerRelationship['trend']) {
 }
 
 // ─── KPI card ────────────────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, valueClass }: { label: string; value: string; sub?: string; valueClass?: string }) {
+function KpiCard({ label, value, sub, valueClass, info }: {
+  label: string; value: string; sub?: string; valueClass?: string
+  info?: { term: string; what: string; calc?: string }
+}) {
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-      <div className="text-xs text-zinc-500 mb-1">{label}</div>
+      <div className="flex items-center text-xs text-zinc-500 mb-1">
+        {label}
+        {info && <InfoTooltip {...info} />}
+      </div>
       <div className={cn('text-xl font-bold', valueClass ?? 'text-white')}>{value}</div>
       {sub && <div className="text-xs text-zinc-500 mt-0.5">{sub}</div>}
     </div>
@@ -200,25 +208,28 @@ export default function SuppliersPage() {
                 <>
                   {/* 6 KPI cards */}
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    <KpiCard label="Total USD" value={fmtUsd(profile.totalUsd)} />
-                    <KpiCard label="Total Tons" value={fmtTons(profile.totalTons)} />
-                    <KpiCard label="Total Shipments" value={fmtNum(profile.totalShipments)} />
+                    <KpiCard label="Total USD" value={fmtUsd(profile.totalUsd)} info={G.totalUsd} />
+                    <KpiCard label="Total Tons" value={fmtTons(profile.totalTons)} info={G.totalTons} />
+                    <KpiCard label="Total Shipments" value={fmtNum(profile.totalShipments)} info={G.totalShipments} />
                     <KpiCard
                       label="Health Score"
                       value={profile.healthScore.toString()}
                       sub={`${profile.momentumUsd > 0 ? '+' : ''}${profile.momentumUsd.toFixed(1)}% 90d momentum`}
                       valueClass={healthColor(profile.healthScore)}
+                      info={G.healthScore}
                     />
                     <KpiCard
                       label="Days Since Last"
                       value={fmtNum(profile.daysSinceLast)}
                       sub="days"
                       valueClass={daysColor(profile.daysSinceLast)}
+                      info={G.daysSinceLast}
                     />
                     <KpiCard
                       label="Avg Days Between Shipments"
                       value={fmtNum(profile.avgDaysBetweenShipments)}
                       sub="days cadence"
+                      info={G.avgDaysBetweenShipments}
                     />
                   </div>
 
@@ -337,12 +348,21 @@ export default function SuppliersPage() {
                               <span className={cn('px-2 py-0.5 rounded border text-xs', statusColor(b.status))}>{b.status}</span>
                               <span>{trendIcon(b.trend)}</span>
                             </div>
-                            <div className="flex gap-4 mt-1 text-xs text-zinc-500 flex-wrap">
+                            <div className="flex gap-4 mt-1 text-xs text-zinc-500 flex-wrap items-center">
                               <span>{fmtUsd(b.usd)}</span>
                               <span>{fmtTons(b.tons)}</span>
-                              <span>Share: {b.share.toFixed(1)}%</span>
-                              <span>Wallet: {b.shareOfWallet.toFixed(1)}%</span>
-                              <span>{b.daysSinceLast}d ago</span>
+                              <span className="flex items-center gap-0.5">
+                                Share: {b.share.toFixed(1)}%
+                                <InfoTooltip term="Supplier Share" what="This buyer's share of this supplier's total revenue. How important is this buyer to the supplier?" calc="Buyer USD ÷ Supplier total USD × 100" />
+                              </span>
+                              <span className="flex items-center gap-0.5">
+                                Wallet: {b.shareOfWallet.toFixed(1)}%
+                                <InfoTooltip {...G.shareOfWallet} />
+                              </span>
+                              <span className="flex items-center gap-0.5">
+                                {b.daysSinceLast}d ago
+                                <InfoTooltip {...G.daysSinceLast} />
+                              </span>
                               <span>Since {b.firstDate}</span>
                               <span>{b.shipmentCount} shipments</span>
                             </div>
@@ -419,7 +439,7 @@ export default function SuppliersPage() {
                           <div className="text-zinc-200 font-medium">${m.marketAvgPriceKg.toFixed(2)}</div>
                         </div>
                         <div>
-                          <div className="text-zinc-500">vs Market</div>
+                          <div className="flex items-center text-zinc-500">vs Market <InfoTooltip {...G.premiumPct} /></div>
                           <div className={cn('font-medium', m.premiumPct >= 0 ? 'text-emerald-400' : 'text-red-400')}>
                             {m.premiumPct >= 0 ? '+' : ''}{m.premiumPct.toFixed(1)}%
                           </div>

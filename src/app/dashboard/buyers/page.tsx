@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useFilters } from '@/store/filters'
 import { ExportButton } from '@/components/ExportButton'
+import { InfoTooltip } from '@/components/InfoTooltip'
+import { G } from '@/lib/glossary'
 import { fmtUsd, fmtTons, fmtNum, cn, mineralColor } from '@/lib/utils'
 import type { TraderProfile } from '@/types/data'
 import {
@@ -39,10 +41,16 @@ function statusBadge(status: 'Active' | 'New' | 'At-risk' | 'Dormant') {
   )
 }
 
-function KpiCard({ label, value, sub, valueClass }: { label: string; value: string; sub?: string; valueClass?: string }) {
+function KpiCard({ label, value, sub, valueClass, info }: {
+  label: string; value: string; sub?: string; valueClass?: string
+  info?: { term: string; what: string; calc?: string }
+}) {
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-      <div className="text-xs text-zinc-500 mb-1">{label}</div>
+      <div className="flex items-center text-xs text-zinc-500 mb-1">
+        {label}
+        {info && <InfoTooltip {...info} />}
+      </div>
       <div className={cn('text-xl font-bold', valueClass ?? 'text-white')}>{value}</div>
       {sub && <div className="text-xs text-zinc-500 mt-0.5">{sub}</div>}
     </div>
@@ -220,31 +228,36 @@ export default function BuyersPage() {
                 <>
                   {/* 8 KPI cards */}
                   <div className="grid grid-cols-4 gap-3">
-                    <KpiCard label="Total USD" value={fmtUsd(profile.totalUsd)} />
-                    <KpiCard label="Total Tons" value={fmtTons(profile.totalTons)} />
-                    <KpiCard label="Total Shipments" value={fmtNum(profile.totalShipments)} />
+                    <KpiCard label="Total USD" value={fmtUsd(profile.totalUsd)} info={G.totalUsd} />
+                    <KpiCard label="Total Tons" value={fmtTons(profile.totalTons)} info={G.totalTons} />
+                    <KpiCard label="Total Shipments" value={fmtNum(profile.totalShipments)} info={G.totalShipments} />
                     <KpiCard
                       label="Avg Shipment USD"
                       value={fmtUsd(profile.totalUsd / Math.max(profile.totalShipments, 1))}
+                      info={G.avgShipment}
                     />
                     <KpiCard
                       label="Market Share"
                       value={`${profile.marketSharePct.toFixed(2)}%`}
                       sub={`#${profile.marketShareRank} of ${profile.totalBuyersInMarket} buyers`}
+                      info={G.marketSharePct}
                     />
                     <KpiCard
                       label="Unique Suppliers"
                       value={fmtNum(profile.uniqueSuppliers)}
+                      info={G.uniqueSuppliers}
                     />
                     <KpiCard
                       label="Avg Price / kg"
                       value={`$${profile.avgPriceKg.toFixed(3)}`}
+                      info={G.avgPriceKg}
                     />
                     <KpiCard
                       label="Days Since Last"
                       value={fmtNum(profile.daysSinceLast)}
                       sub="days"
                       valueClass={daysColor(profile.daysSinceLast)}
+                      info={G.daysSinceLast}
                     />
                   </div>
 
@@ -271,7 +284,9 @@ export default function BuyersPage() {
                   <div className="grid grid-cols-2 gap-4">
                     {/* Concentration Risk */}
                     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                      <h3 className="text-sm font-semibold text-white mb-3">Concentration Risk</h3>
+                      <h3 className="text-sm font-semibold text-white mb-3 flex items-center">
+                        Concentration Risk <InfoTooltip {...G.concentrationRisk} />
+                      </h3>
                       <p className="text-xs text-zinc-500 mb-3">Share of purchase USD by top suppliers</p>
                       {[
                         { label: 'Top-1 Supplier', value: profile.concentrationRisk.top1Share },
@@ -299,7 +314,9 @@ export default function BuyersPage() {
 
                     {/* Supplier Status */}
                     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                      <h3 className="text-sm font-semibold text-white mb-3">Supplier Status</h3>
+                      <h3 className="text-sm font-semibold text-white mb-3 flex items-center">
+                        Supplier Status <InfoTooltip {...G.buyerStatus} />
+                      </h3>
                       <div className="grid grid-cols-2 gap-3">
                         {[
                           { label: 'Active', count: profile.supplierStatusCounts.active, cls: 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' },
@@ -363,13 +380,13 @@ export default function BuyersPage() {
                         <div>
                           <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto] items-center px-4 py-2 text-xs text-zinc-500 font-medium border-b border-zinc-800 gap-3">
                             <span>Supplier</span>
-                            <span className="text-right w-20">Status</span>
+                            <span className="text-right w-20 flex items-center justify-end gap-0.5">Status <InfoTooltip {...G.buyerStatus} /></span>
                             <span className="text-right w-28">Revenue</span>
                             <span className="text-right w-24">Volume</span>
                             <span className="text-right w-16">Ships</span>
-                            <span className="text-right w-24">Wallet%</span>
-                            <span className="text-right w-24">Last</span>
-                            <span className="text-right w-16">Days</span>
+                            <span className="text-right w-24 flex items-center justify-end gap-0.5">Wallet% <InfoTooltip {...G.shareOfWallet} /></span>
+                            <span className="text-right w-24">Last Delivery</span>
+                            <span className="text-right w-16 flex items-center justify-end gap-0.5">Days <InfoTooltip {...G.daysSinceLast} /></span>
                           </div>
 
                           {rows.map((s) => {

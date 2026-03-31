@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useFilters } from '@/store/filters'
 import { ExportButton } from '@/components/ExportButton'
 import { fmtUsd, fmtTons, fmtNum, cn } from '@/lib/utils'
+import { InfoTooltip } from '@/components/InfoTooltip'
+import { G } from '@/lib/glossary'
 import type { PoachRow } from '@/types/data'
 import {
   ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, ZAxis,
@@ -145,12 +147,20 @@ export default function PoachPage() {
               <tr className="border-b border-zinc-800 text-xs text-zinc-500">
                 <th className="text-left px-4 py-3 font-medium">#</th>
                 <th className="text-left px-4 py-3 font-medium">Supplier</th>
-                <th className="text-center px-4 py-3 font-medium">Tier</th>
-                <th className="text-right px-4 py-3 font-medium">Score</th>
+                <th className="text-center px-4 py-3 font-medium">
+                  <span className="flex items-center justify-center gap-0.5">Tier <InfoTooltip {...G.poachTier} /></span>
+                </th>
+                <th className="text-right px-4 py-3 font-medium">
+                  <span className="flex items-center justify-end gap-0.5">Score <InfoTooltip {...G.poachIndex} /></span>
+                </th>
                 <th className="text-right px-4 py-3 font-medium">Volume</th>
                 <th className="text-right px-4 py-3 font-medium">USD</th>
-                <th className="text-right px-4 py-3 font-medium">Gap</th>
-                <th className="text-right px-4 py-3 font-medium">Days Since</th>
+                <th className="text-right px-4 py-3 font-medium">
+                  <span className="flex items-center justify-end gap-0.5">Gap <InfoTooltip {...G.poachGap} /></span>
+                </th>
+                <th className="text-right px-4 py-3 font-medium">
+                  <span className="flex items-center justify-end gap-0.5">Days Since <InfoTooltip {...G.recencyDays} /></span>
+                </th>
                 <th className="text-left px-4 py-3 font-medium">Mineral</th>
                 <th className="text-left px-4 py-3 font-medium">Recommended Action</th>
               </tr>

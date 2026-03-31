@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { InfoTooltip } from '@/components/InfoTooltip'
 
 interface KpiCardProps {
   label: string
@@ -10,6 +11,8 @@ interface KpiCardProps {
   icon?: string
   className?: string
   accent?: 'blue' | 'green' | 'amber' | 'red' | 'purple'
+  /** Tooltip info for this metric */
+  info?: { term: string; what: string; calc?: string }
 }
 
 const ACCENT = {
@@ -30,6 +33,7 @@ export function KpiCard({
   icon,
   className,
   accent = 'blue',
+  info,
 }: KpiCardProps) {
   const colors = ACCENT[accent]
   const trendUp = trend !== null && trend !== undefined && trend > 0
@@ -44,7 +48,10 @@ export function KpiCard({
       )}
     >
       <div className="flex items-start justify-between">
-        <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{label}</span>
+        <span className="flex items-center text-xs font-medium text-zinc-400 uppercase tracking-wider">
+          {label}
+          {info && <InfoTooltip term={info.term} what={info.what} calc={info.calc} />}
+        </span>
         {icon && <span className="text-lg leading-none opacity-60">{icon}</span>}
       </div>
 

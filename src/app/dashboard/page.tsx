@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useFilters } from '@/store/filters'
 import { KpiCard } from '@/components/KpiCard'
 import { ExportButton } from '@/components/ExportButton'
+import { InfoTooltip } from '@/components/InfoTooltip'
+import { G } from '@/lib/glossary'
 import { fmtUsd, fmtTons, fmtNum, mineralColor } from '@/lib/utils'
 import type { KpiData } from '@/types/data'
 import {
@@ -55,7 +57,7 @@ export default function DashboardPage() {
 
       {/* ── Row 1: Primary KPI cards (8) ───────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
-        <KpiCard label="Total Shipments" value={fmtNum(data.totalShipments)} icon="📦" accent="blue" />
+        <KpiCard label="Total Shipments" value={fmtNum(data.totalShipments)} icon="📦" accent="blue" info={G.totalShipments} />
         <KpiCard
           label="Total USD"
           value={fmtUsd(data.totalUsd, true)}
@@ -63,6 +65,7 @@ export default function DashboardPage() {
           trendLabel="YoY"
           icon="💵"
           accent="green"
+          info={G.totalUsd}
         />
         <KpiCard
           label="Total Tonnage"
@@ -71,12 +74,14 @@ export default function DashboardPage() {
           trendLabel="YoY"
           icon="⚖️"
           accent="blue"
+          info={G.totalTons}
         />
         <KpiCard
           label="Avg Price / kg"
           value={`$${data.avgPricePerKg.toFixed(3)}`}
           icon="💲"
           accent="amber"
+          info={G.avgPriceKg}
         />
         <KpiCard
           label="Penfold Share"
@@ -84,6 +89,7 @@ export default function DashboardPage() {
           subValue="of market USD"
           icon="🎯"
           accent="purple"
+          info={G.penfoldShare}
         />
         <KpiCard
           label="Suppliers"
@@ -92,8 +98,9 @@ export default function DashboardPage() {
           subLabel="this quarter"
           icon="🏭"
           accent="amber"
+          info={G.uniqueSuppliers}
         />
-        <KpiCard label="Buyers" value={fmtNum(data.uniqueBuyers)} icon="🏢" accent="purple" />
+        <KpiCard label="Buyers" value={fmtNum(data.uniqueBuyers)} icon="🏢" accent="purple" info={G.uniqueBuyers} />
         <KpiCard
           label="Avg Shipment"
           value={fmtTons(data.avgShipmentTons)}
@@ -101,6 +108,7 @@ export default function DashboardPage() {
           subLabel="avg value"
           icon="🚚"
           accent="blue"
+          info={G.avgShipment}
         />
       </div>
 
@@ -109,7 +117,10 @@ export default function DashboardPage() {
         {data.rollingMetrics.map((rm) => (
           <div key={rm.period} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="text-xs text-zinc-500 uppercase tracking-wider">Last {rm.period}</div>
+              <div className="flex items-center text-xs text-zinc-500 uppercase tracking-wider">
+                Last {rm.period}
+                <InfoTooltip {...G.rollingWindow} />
+              </div>
               <div className="text-xs text-zinc-600">vs prev {rm.period}</div>
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -213,6 +224,7 @@ export default function DashboardPage() {
               subColor={healthColor}
               pct={Math.min((data.marketHealth.hhi / 10000) * 100, 100)}
               barColor={healthColor}
+              info={G.hhi}
             />
             <GaugeRow
               label="Supplier CR4"
@@ -220,6 +232,7 @@ export default function DashboardPage() {
               sub={data.marketHealth.cr4 > 60 ? 'High concentration' : 'Competitive'}
               pct={Math.min(data.marketHealth.cr4, 100)}
               barColor={data.marketHealth.cr4 > 60 ? '#EF4444' : '#10B981'}
+              info={G.supplierCr4}
             />
             <GaugeRow
               label="Buyer CR4"
@@ -227,6 +240,7 @@ export default function DashboardPage() {
               sub={data.marketHealth.buyerCr4 > 60 ? 'Buyer-side concentrated' : 'Buyer-side competitive'}
               pct={Math.min(data.marketHealth.buyerCr4, 100)}
               barColor={data.marketHealth.buyerCr4 > 60 ? '#EF4444' : '#8B5CF6'}
+              info={G.buyerCr4}
             />
             <GaugeRow
               label="New Entrant Rate"
@@ -234,6 +248,7 @@ export default function DashboardPage() {
               sub="new suppliers last quarter"
               pct={Math.min(data.marketHealth.newEntrantRate * 3, 100)}
               barColor="#F59E0B"
+              info={G.newEntrantRate}
             />
             <GaugeRow
               label="Price Volatility"
@@ -241,6 +256,7 @@ export default function DashboardPage() {
               sub="monthly avg price std dev"
               pct={Math.min(data.marketHealth.priceVolatilityPct * 2, 100)}
               barColor={data.marketHealth.priceVolatilityPct > 20 ? '#EF4444' : '#06B6D4'}
+              info={G.priceVolatility}
             />
           </div>
         </div>
@@ -288,8 +304,12 @@ export default function DashboardPage() {
             <span className="col-span-4">Supplier</span>
             <span className="col-span-2 text-right">USD</span>
             <span className="col-span-2 text-right">Tons</span>
-            <span className="col-span-2 text-right">$/kg</span>
-            <span className="col-span-1 text-right">%</span>
+            <span className="col-span-2 text-right flex items-center justify-end gap-0.5">
+              $/kg <InfoTooltip {...G.avgPriceKg} />
+            </span>
+            <span className="col-span-1 text-right flex items-center justify-end gap-0.5">
+              % <InfoTooltip term="Market Share %" what="This supplier's share of total market USD in the filtered range." calc="Supplier USD ÷ Total market USD × 100" />
+            </span>
           </div>
           <div className="space-y-1.5">
             {data.topSuppliers.slice(0, 10).map((s, i) => (
@@ -351,7 +371,9 @@ export default function DashboardPage() {
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-green-400 text-lg">▲</span>
-            <h3 className="text-sm font-semibold text-white">Top Gainers (YoY)</h3>
+            <h3 className="text-sm font-semibold text-white flex items-center gap-1">
+              Top Gainers (YoY) <InfoTooltip {...G.yoy} />
+            </h3>
             <span className="text-xs text-zinc-500 ml-auto">suppliers vs same period last year</span>
           </div>
           <div className="grid grid-cols-12 text-xs text-zinc-500 uppercase tracking-wider mb-2 px-1">
@@ -506,15 +528,19 @@ function RollingCell({ label, value, change }: { label: string; value: string; c
 }
 
 function GaugeRow({
-  label, value, sub, subColor, pct, barColor,
+  label, value, sub, subColor, pct, barColor, info,
 }: {
   label: string; value: string; sub?: string; subColor?: string; pct: number; barColor: string
+  info?: { term: string; what: string; calc?: string }
 }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
         <div>
-          <div className="text-xs text-zinc-400">{label}</div>
+          <div className="flex items-center text-xs text-zinc-400">
+            {label}
+            {info && <InfoTooltip {...info} />}
+          </div>
           {sub && (
             <div className="text-xs" style={{ color: subColor || '#71717a' }}>{sub}</div>
           )}
