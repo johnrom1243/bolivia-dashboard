@@ -13,6 +13,12 @@ import {
   COLORS, CHART_THEME,
 } from '@/components/charts'
 
+function fmtK(v: number) {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`
+  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}k`
+  return `$${v.toFixed(0)}`
+}
+
 // ─── Tab types ──────────────────────────────────────────────────────────────
 type Tab = 'overview' | 'buyers' | 'minerals' | 'price' | 'timeline' | 'transactions'
 const TABS: { id: Tab; label: string }[] = [
@@ -233,6 +239,48 @@ export default function SuppliersPage() {
                     />
                   </div>
 
+                  {/* ── Company Intelligence ── */}
+                  <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-4">
+                    <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Company Intelligence</div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                      <div>
+                        <div className="text-zinc-500 mb-0.5">First Export</div>
+                        <div className="text-zinc-200 font-medium">{profile.firstShipment}</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500 mb-0.5">Last Export</div>
+                        <div className={cn('font-medium', daysColor(profile.daysSinceLast))}>{profile.lastShipment}</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500 mb-0.5">Active Since</div>
+                        <div className="text-zinc-200 font-medium">{Math.round((new Date(profile.lastShipment).getTime() - new Date(profile.firstShipment).getTime()) / (86400000 * 30))} months</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500 mb-0.5">Peak Quarter</div>
+                        <div className="text-zinc-200 font-medium">{profile.peakQuarter}</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500 mb-0.5">Top Buyer</div>
+                        <div className="text-zinc-200 font-medium truncate">{profile.buyerShares[0]?.buyer ?? '—'}</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500 mb-0.5">Top Mineral</div>
+                        <div className="text-zinc-200 font-medium">{profile.mineralMix[0]?.mineral ?? '—'}</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500 mb-0.5">Avg Cadence</div>
+                        <div className="text-zinc-200 font-medium">{profile.avgDaysBetweenShipments}d between shipments</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500 mb-0.5">Status</div>
+                        <div className={cn('font-semibold', profile.daysSinceLast < 90 ? 'text-emerald-400' : profile.daysSinceLast < 180 ? 'text-amber-400' : 'text-red-400')}>
+                          {profile.daysSinceLast < 90 ? 'Active' : profile.daysSinceLast < 180 ? 'At Risk' : 'Dormant'}
+                          {' '}· {profile.daysSinceLast}d since last export
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Buyer share + mineral mix */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
@@ -336,6 +384,7 @@ export default function SuppliersPage() {
                   {/* Buyer cards */}
                   <div className="space-y-2">
                     {profile.buyerRelationships.map((b) => (
+
                       <div key={b.buyer} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
                         {/* Header row */}
                         <button
@@ -408,6 +457,79 @@ export default function SuppliersPage() {
                       </div>
                     ))}
                   </div>
+
+                  {/* ── Monthly Buyer Breakdown ── */}
+                  {profile.monthlyBuyerTimeline && profile.monthlyBuyerTimeline.months.length > 0 && (
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                      <div className="px-5 py-4 border-b border-zinc-800">
+                        <h3 className="text-sm font-semibold text-white">Monthly Buyer Breakdown</h3>
+                        <p className="text-xs text-zinc-500 mt-0.5">USD shipped to each buyer per month — scroll right for full history</p>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="text-xs min-w-full">
+                          <thead>
+                            <tr className="border-b border-zinc-800 text-zinc-500">
+                              <th className="sticky left-0 bg-zinc-900 text-left px-4 py-2.5 font-medium w-24 z-10">Month</th>
+                              {profile.monthlyBuyerTimeline.buyers.map((b) => (
+                                <th key={b} className="text-right px-3 py-2.5 font-medium whitespace-nowrap max-w-[120px] truncate" title={b}>
+                                  {b.length > 18 ? b.slice(0, 16) + '…' : b}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[...profile.monthlyBuyerTimeline.rows].reverse().map((row) => {
+                              const total = profile.monthlyBuyerTimeline.buyers.reduce((s, b) => s + (Number(row[b]) || 0), 0)
+                              return (
+                                <tr key={row.month} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+                                  <td className="sticky left-0 bg-zinc-900 px-4 py-2 font-medium text-zinc-300 w-24 z-10">{String(row.month)}</td>
+                                  {profile.monthlyBuyerTimeline.buyers.map((b) => {
+                                    const v = Number(row[b]) || 0
+                                    const pct = total > 0 ? v / total : 0
+                                    return (
+                                      <td key={b} className="px-3 py-2 text-right tabular-nums">
+                                        {v > 0 ? (
+                                          <div>
+                                            <div className="text-zinc-200">{fmtK(v)}</div>
+                                            <div className="text-zinc-600 text-[10px]">{(pct * 100).toFixed(0)}%</div>
+                                          </div>
+                                        ) : (
+                                          <span className="text-zinc-800">—</span>
+                                        )}
+                                      </td>
+                                    )
+                                  })}
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Competitor Intelligence ── */}
+                  {profile.competitorPresence && profile.competitorPresence.length > 0 && (
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                      <h3 className="text-sm font-semibold text-white mb-1">Competitor Intelligence</h3>
+                      <p className="text-xs text-zinc-500 mb-3">Other suppliers who also ship to this supplier's key buyers</p>
+                      <div className="space-y-3">
+                        {profile.competitorPresence.map((cp) => (
+                          <div key={cp.buyer}>
+                            <div className="text-xs font-semibold text-zinc-300 mb-1.5">{cp.buyer}</div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {cp.otherSuppliers.map((s) => (
+                                <span key={s} className="px-2 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 text-xs">{s}</span>
+                              ))}
+                              {cp.otherSuppliers.length === 0 && (
+                                <span className="text-zinc-600 text-xs italic">No other known suppliers</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 

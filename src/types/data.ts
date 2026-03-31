@@ -191,6 +191,11 @@ export interface SupplierProfile {
   buyerShares: { buyer: string; tons: number; usd: number; share: number; firstDate: string }[]
   quarterlyTimeline: { quarter: string; buyer: string; value: number }[]
   monthlyTimeline: { date: string; usd: number; tons: number; shipments: number }[]
+  monthlyBuyerTimeline: {
+    months: string[]       // sorted YYYY-MM labels
+    buyers: string[]       // buyers sorted by total USD desc
+    rows: { month: string; [buyer: string]: number | string }[]  // usd per buyer per month
+  }
   mineralMix: {
     mineral: string
     tons: number
@@ -260,6 +265,11 @@ export interface TraderProfile {
 
   quarterlyVolume: { quarter: string; usd: number; tons: number; shipments: number }[]
   monthlyTimeline: { date: string; usd: number; tons: number; shipments: number }[]   // NEW
+  monthlySupplierTimeline: {
+    months: string[]         // sorted YYYY-MM labels
+    suppliers: string[]      // suppliers sorted by total USD desc (top 10)
+    rows: { month: string; [supplier: string]: number | string }[]
+  }
   yoyComparison: { year: number; usd: number; tons: number; shipments: number; suppliers: number }[]  // NEW
 
   mineralBreakdown: {                  // NEW: richer than old pricing power

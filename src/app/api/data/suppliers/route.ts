@@ -204,6 +204,36 @@ export async function GET(req: NextRequest) {
         shipments: v.shipments,
       }))
 
+    // ─── Monthly buyer breakdown (pivot) ────────────────────────────────────
+    const mbMap: Record<string, Record<string, number>> = {}
+    for (const r of sub) {
+      const m = r.Date.slice(0, 7)
+      if (!mbMap[m]) mbMap[m] = {}
+      mbMap[m][r.buyer] = (mbMap[m][r.buyer] || 0) + r.usd
+    }
+    const mbMonths = Object.keys(mbMap).sort()
+    // Sort buyers by total USD desc
+    const mbBuyerTotals: Record<string, number> = {}
+    for (const [, byBuyer] of Object.entries(mbMap)) {
+      for (const [buyer, usd] of Object.entries(byBuyer)) {
+        mbBuyerTotals[buyer] = (mbBuyerTotals[buyer] || 0) + usd
+      }
+    }
+    const mbBuyers = Object.entries(mbBuyerTotals)
+      .sort((a, b) => b[1] - a[1])
+      .map(([b]) => b)
+    const monthlyBuyerTimeline = {
+      months: mbMonths,
+      buyers: mbBuyers,
+      rows: mbMonths.map((month) => {
+        const row: { month: string; [key: string]: number | string } = { month }
+        for (const buyer of mbBuyers) {
+          row[buyer] = Math.round(mbMap[month]?.[buyer] ?? 0)
+        }
+        return row
+      }),
+    }
+
     // ─── Mineral mix (extended) ──────────────────────────────────────────────
     const mineralMapExt: Record<string, {
       tons: number; usd: number; kg: number; count: number; buyers: Set<string>
@@ -409,6 +439,7 @@ export async function GET(req: NextRequest) {
       buyerShares,
       quarterlyTimeline,
       monthlyTimeline,
+      monthlyBuyerTimeline,
       mineralMix,
       priceVsMarket,
       priceVsMarketByMineral,

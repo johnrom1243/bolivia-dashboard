@@ -57,6 +57,12 @@ function KpiCard({ label, value, sub, valueClass, info }: {
   )
 }
 
+function fmtK(v: number) {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`
+  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}k`
+  return `$${v.toFixed(0)}`
+}
+
 const PENFOLD_NAMES = ['PENFOLD', 'PENFOLD COMMODITIES', 'PENFOLDS']
 
 // ─── Main page ──────────────────────────────────────────────────────────────
@@ -259,6 +265,50 @@ export default function BuyersPage() {
                       valueClass={daysColor(profile.daysSinceLast)}
                       info={G.daysSinceLast}
                     />
+                  </div>
+
+                  {/* ── Company Intelligence ── */}
+                  <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-4">
+                    <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Company Intelligence</div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                      <div>
+                        <div className="text-zinc-500 mb-0.5">First Import</div>
+                        <div className="text-zinc-200 font-medium">{profile.firstShipment}</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500 mb-0.5">Last Import</div>
+                        <div className={cn('font-medium', daysColor(profile.daysSinceLast))}>{profile.lastShipment}</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500 mb-0.5">Market Rank</div>
+                        <div className="text-zinc-200 font-medium">#{profile.marketShareRank} of {profile.totalBuyersInMarket} buyers</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500 mb-0.5">Buying Cadence</div>
+                        <div className="text-zinc-200 font-medium">{profile.avgDaysBetweenShipments}d avg between purchases</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500 mb-0.5">Top Mineral</div>
+                        <div className="text-zinc-200 font-medium">{profile.mineralBreakdown[0]?.mineral ?? '—'}</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500 mb-0.5">Top Supplier</div>
+                        <div className="text-zinc-200 font-medium truncate">{profile.supplierRoster?.[0]?.supplier ?? '—'}</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500 mb-0.5">Supplier Retention</div>
+                        <div className={cn('font-medium', profile.supplierRetentionRate >= 70 ? 'text-emerald-400' : profile.supplierRetentionRate >= 40 ? 'text-amber-400' : 'text-red-400')}>
+                          {profile.supplierRetentionRate.toFixed(0)}% YoY
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500 mb-0.5">Status</div>
+                        <div className={cn('font-semibold', profile.daysSinceLast < 90 ? 'text-emerald-400' : profile.daysSinceLast < 180 ? 'text-amber-400' : 'text-red-400')}>
+                          {profile.daysSinceLast < 90 ? 'Active' : profile.daysSinceLast < 180 ? 'Slowing' : 'Dormant'}
+                          {' '}· {profile.daysSinceLast}d since last import
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Quarterly dual-axis chart */}
@@ -523,6 +573,56 @@ export default function BuyersPage() {
                             </div>
                           </div>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Monthly Supplier Breakdown ── */}
+                  {profile.monthlySupplierTimeline && profile.monthlySupplierTimeline.months.length > 0 && (
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                      <div className="px-5 py-4 border-b border-zinc-800">
+                        <h3 className="text-sm font-semibold text-white">Monthly Supplier Breakdown</h3>
+                        <p className="text-xs text-zinc-500 mt-0.5">USD received from each supplier per month — top 12 by volume</p>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="text-xs min-w-full">
+                          <thead>
+                            <tr className="border-b border-zinc-800 text-zinc-500">
+                              <th className="sticky left-0 bg-zinc-900 text-left px-4 py-2.5 font-medium w-24 z-10">Month</th>
+                              {profile.monthlySupplierTimeline.suppliers.map((s) => (
+                                <th key={s} className="text-right px-3 py-2.5 font-medium whitespace-nowrap" title={s}>
+                                  {s.length > 18 ? s.slice(0, 16) + '…' : s}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[...profile.monthlySupplierTimeline.rows].reverse().map((row) => {
+                              const total = profile.monthlySupplierTimeline.suppliers.reduce((s, sup) => s + (Number(row[sup]) || 0), 0)
+                              return (
+                                <tr key={row.month} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+                                  <td className="sticky left-0 bg-zinc-900 px-4 py-2 font-medium text-zinc-300 w-24 z-10">{String(row.month)}</td>
+                                  {profile.monthlySupplierTimeline.suppliers.map((s) => {
+                                    const v = Number(row[s]) || 0
+                                    const pct = total > 0 ? v / total : 0
+                                    return (
+                                      <td key={s} className="px-3 py-2 text-right tabular-nums">
+                                        {v > 0 ? (
+                                          <div>
+                                            <div className="text-zinc-200">{fmtK(v)}</div>
+                                            <div className="text-zinc-600 text-[10px]">{(pct * 100).toFixed(0)}%</div>
+                                          </div>
+                                        ) : (
+                                          <span className="text-zinc-800">—</span>
+                                        )}
+                                      </td>
+                                    )
+                                  })}
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   )}

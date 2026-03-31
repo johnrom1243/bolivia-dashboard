@@ -103,6 +103,37 @@ export async function GET(req: NextRequest) {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, v]) => ({ date, ...v }))
 
+    // ─── Monthly supplier breakdown (pivot) ─────────────────────────────────
+    const msBuyerMap: Record<string, Record<string, number>> = {}
+    for (const r of sub) {
+      const m = r.Date.slice(0, 7)
+      if (!msBuyerMap[m]) msBuyerMap[m] = {}
+      msBuyerMap[m][r.supplier] = (msBuyerMap[m][r.supplier] || 0) + r.usd
+    }
+    const msMonths = Object.keys(msBuyerMap).sort()
+    // Sort suppliers by total USD desc, cap at top 12 for readability
+    const msSupplierTotals: Record<string, number> = {}
+    for (const [, bySupplier] of Object.entries(msBuyerMap)) {
+      for (const [supplier, usd] of Object.entries(bySupplier)) {
+        msSupplierTotals[supplier] = (msSupplierTotals[supplier] || 0) + usd
+      }
+    }
+    const msSuppliers = Object.entries(msSupplierTotals)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([s]) => s)
+    const monthlySupplierTimeline = {
+      months: msMonths,
+      suppliers: msSuppliers,
+      rows: msMonths.map((month) => {
+        const row: { month: string; [key: string]: number | string } = { month }
+        for (const supplier of msSuppliers) {
+          row[supplier] = Math.round(msBuyerMap[month]?.[supplier] ?? 0)
+        }
+        return row
+      }),
+    }
+
     // YoY comparison
     const yearMap: Record<number, { usd: number; tons: number; shipments: number; supplierSet: Set<string> }> = {}
     for (const r of sub) {
@@ -494,6 +525,7 @@ export async function GET(req: NextRequest) {
       },
       quarterlyVolume,
       monthlyTimeline,
+      monthlySupplierTimeline,
       yoyComparison,
       mineralBreakdown,
       seasonalPattern,
