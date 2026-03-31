@@ -73,16 +73,27 @@ export default function SuppliersPage() {
   const [priceMineral, setPriceMineral] = useState<string>('')
   const [timelineMetric, setTimelineMetric] = useState<'usd' | 'tons'>('usd')
   const [txSort, setTxSort] = useState<{ col: string; dir: 1 | -1 }>({ col: 'date', dir: -1 })
+  const [mineralFilter, setMineralFilter] = useState<string>('')
 
   const { data: list } = useQuery<{ name: string; tons: number; usd: number; shipments: number }[]>({
     queryKey: ['suppliers-list', queryString],
     queryFn: () => fetch(`/api/data/suppliers${queryString}`).then((r) => r.json()),
   })
 
-  const { data: profile, isLoading } = useQuery<SupplierProfile | null>({
-    queryKey: ['supplier-profile', selected, queryString],
+  // Unfiltered profile just for the mineral list (always fetches without mineral filter)
+  const { data: mineralList } = useQuery<{ mineralMix: { mineral: string }[] } | null>({
+    queryKey: ['supplier-minerals', selected, queryString],
     queryFn: () =>
       fetch(`/api/data/suppliers?supplier=${encodeURIComponent(selected)}${queryString.replace('?', '&')}`).then((r) => r.json()),
+    enabled: !!selected,
+    staleTime: 60_000,
+  })
+
+  const mineralQs = mineralFilter ? `&minerals=${encodeURIComponent(mineralFilter)}` : ''
+  const { data: profile, isLoading } = useQuery<SupplierProfile | null>({
+    queryKey: ['supplier-profile', selected, queryString, mineralFilter],
+    queryFn: () =>
+      fetch(`/api/data/suppliers?supplier=${encodeURIComponent(selected)}${queryString.replace('?', '&')}${mineralQs}`).then((r) => r.json()),
     enabled: !!selected,
   })
 
@@ -146,7 +157,7 @@ export default function SuppliersPage() {
           {filteredList.map((s) => (
             <button
               key={s.name}
-              onClick={() => { setSelected(s.name); setActiveTab('overview') }}
+              onClick={() => { setSelected(s.name); setActiveTab('overview'); setMineralFilter('') }}
               className={cn(
                 'w-full text-left px-3 py-2.5 border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors',
                 selected === s.name && 'bg-blue-900/30 border-l-2 border-l-blue-500',
@@ -182,7 +193,7 @@ export default function SuppliersPage() {
                 </p>
               </div>
               <ExportButton
-                url={`/api/export?type=supplier&supplier=${encodeURIComponent(selected)}${queryString.replace('?', '&')}`}
+                url={`/api/export?type=supplier&supplier=${encodeURIComponent(selected)}${queryString.replace('?', '&')}${mineralQs}`}
                 label="Export"
                 filename={`supplier_${selected}.xlsx`}
               />
@@ -204,6 +215,36 @@ export default function SuppliersPage() {
                   {tab.label}
                 </button>
               ))}
+              {/* Mineral filter */}
+              {mineralList?.mineralMix && mineralList.mineralMix.length > 1 && (
+                <div className="ml-auto flex items-center gap-1.5 pb-1">
+                  <button
+                    onClick={() => setMineralFilter('')}
+                    className={cn(
+                      'px-2.5 py-1 text-xs rounded-md border transition-colors',
+                      mineralFilter === ''
+                        ? 'bg-blue-600 border-blue-500 text-white'
+                        : 'border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600',
+                    )}
+                  >
+                    All
+                  </button>
+                  {mineralList.mineralMix.map((m) => (
+                    <button
+                      key={m.mineral}
+                      onClick={() => setMineralFilter(m.mineral)}
+                      className={cn(
+                        'px-2.5 py-1 text-xs rounded-md border transition-colors',
+                        mineralFilter === m.mineral
+                          ? 'bg-blue-600 border-blue-500 text-white'
+                          : 'border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600',
+                      )}
+                    >
+                      {m.mineral}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Tab content */}
