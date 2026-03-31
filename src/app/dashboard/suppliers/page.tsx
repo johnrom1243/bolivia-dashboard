@@ -1,5 +1,6 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { useFilters } from '@/store/filters'
 import { ExportButton } from '@/components/ExportButton'
@@ -63,6 +64,20 @@ function KpiCard({ label, value, sub, valueClass, info }: {
   )
 }
 
+// ─── URL param reader (needs Suspense) ──────────────────────────────────────
+function SelectFromUrl({
+  onSelect,
+}: {
+  onSelect: (name: string) => void
+}) {
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    const name = searchParams.get('select')
+    if (name) onSelect(decodeURIComponent(name))
+  }, [searchParams, onSelect])
+  return null
+}
+
 // ─── Main page ──────────────────────────────────────────────────────────────
 export default function SuppliersPage() {
   const { queryString } = useFilters()
@@ -74,6 +89,8 @@ export default function SuppliersPage() {
   const [timelineMetric, setTimelineMetric] = useState<'usd' | 'tons'>('usd')
   const [txSort, setTxSort] = useState<{ col: string; dir: 1 | -1 }>({ col: 'date', dir: -1 })
   const [mineralFilter, setMineralFilter] = useState<string>('')
+
+  const router = useRouter()
 
   const { data: list } = useQuery<{ name: string; tons: number; usd: number; shipments: number }[]>({
     queryKey: ['suppliers-list', queryString],
@@ -141,6 +158,15 @@ export default function SuppliersPage() {
 
   return (
     <div className="flex gap-4 h-full">
+      <Suspense fallback={null}>
+        <SelectFromUrl
+          onSelect={(name) => {
+            setSelected(name)
+            setActiveTab('overview')
+            setMineralFilter('')
+          }}
+        />
+      </Suspense>
       {/* ── Left: supplier list ── */}
       <div className="w-64 flex-shrink-0 bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col">
         <div className="p-3 border-b border-zinc-800">
@@ -435,6 +461,16 @@ export default function SuppliersPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-sm font-semibold text-white truncate">{b.buyer}</span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  router.push(`/dashboard/buyers?select=${encodeURIComponent(b.buyer)}`)
+                                }}
+                                title="View buyer deep dive"
+                                className="ml-1 px-1.5 py-0.5 text-xs rounded border border-zinc-700 text-zinc-500 hover:text-blue-400 hover:border-blue-500 transition-colors flex-shrink-0"
+                              >
+                                ↗
+                              </button>
                               <span className={cn('px-2 py-0.5 rounded border text-xs', statusColor(b.status))}>{b.status}</span>
                               <span>{trendIcon(b.trend)}</span>
                             </div>
@@ -513,7 +549,13 @@ export default function SuppliersPage() {
                               <th className="sticky left-0 bg-zinc-900 text-left px-4 py-2.5 font-medium w-24 z-10">Month</th>
                               {profile.monthlyBuyerTimeline.buyers.map((b) => (
                                 <th key={b} className="text-right px-3 py-2.5 font-medium whitespace-nowrap max-w-[120px] truncate" title={b}>
-                                  {b.length > 18 ? b.slice(0, 16) + '…' : b}
+                                  <button
+                                    onClick={() => router.push(`/dashboard/buyers?select=${encodeURIComponent(b)}`)}
+                                    className="hover:text-blue-400 transition-colors"
+                                    title="View buyer deep dive"
+                                  >
+                                    {b.length > 18 ? b.slice(0, 16) + '…' : b} ↗
+                                  </button>
                                 </th>
                               ))}
                             </tr>

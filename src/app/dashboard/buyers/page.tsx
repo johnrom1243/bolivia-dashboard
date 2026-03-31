@@ -1,5 +1,6 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { useFilters } from '@/store/filters'
 import { ExportButton } from '@/components/ExportButton'
@@ -65,6 +66,20 @@ function fmtK(v: number) {
 
 const PENFOLD_NAMES = ['PENFOLD', 'PENFOLD COMMODITIES', 'PENFOLDS']
 
+// ─── URL param reader (needs Suspense) ──────────────────────────────────────
+function SelectFromUrl({
+  onSelect,
+}: {
+  onSelect: (name: string) => void
+}) {
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    const name = searchParams.get('select')
+    if (name) onSelect(decodeURIComponent(name))
+  }, [searchParams, onSelect])
+  return null
+}
+
 // ─── Main page ──────────────────────────────────────────────────────────────
 export default function BuyersPage() {
   const { queryString } = useFilters()
@@ -78,6 +93,8 @@ export default function BuyersPage() {
   const [smSearch, setSmSearch] = useState('')
   const [timelineMetric, setTimelineMetric] = useState<'usd' | 'tons'>('usd')
   const [txSort, setTxSort] = useState<{ col: string; dir: 1 | -1 }>({ col: 'date', dir: -1 })
+
+  const router = useRouter()
 
   const { data: list } = useQuery<{ name: string; tons: number; usd: number; shipments: number }[]>({
     queryKey: ['buyers-list', queryString],
@@ -152,6 +169,15 @@ export default function BuyersPage() {
 
   return (
     <div className="flex gap-4 h-full">
+      <Suspense fallback={null}>
+        <SelectFromUrl
+          onSelect={(name) => {
+            setSelected(name)
+            setActiveTab('overview')
+            setMineralFilter('')
+          }}
+        />
+      </Suspense>
       {/* ── Left: buyer list ── */}
       <div className="w-64 flex-shrink-0 bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col">
         <div className="p-3 border-b border-zinc-800">
@@ -334,7 +360,18 @@ export default function BuyersPage() {
                       </div>
                       <div>
                         <div className="text-zinc-500 mb-0.5">Top Supplier</div>
-                        <div className="text-zinc-200 font-medium truncate">{profile.supplierRoster?.[0]?.supplier ?? '—'}</div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="text-zinc-200 font-medium truncate">{profile.supplierRoster?.[0]?.supplier ?? '—'}</div>
+                          {profile.supplierRoster?.[0]?.supplier && (
+                            <button
+                              onClick={() => router.push(`/dashboard/suppliers?select=${encodeURIComponent(profile.supplierRoster![0].supplier)}`)}
+                              title="View supplier deep dive"
+                              className="px-1.5 py-0.5 text-xs rounded border border-zinc-700 text-zinc-500 hover:text-blue-400 hover:border-blue-500 transition-colors flex-shrink-0"
+                            >
+                              ↗
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div>
                         <div className="text-zinc-500 mb-0.5">Supplier Retention</div>
@@ -501,6 +538,16 @@ export default function BuyersPage() {
                                   <span className="flex items-center gap-2">
                                     <span className={cn('text-xs transition-transform inline-block', isExpanded ? 'rotate-90' : '')}>▶</span>
                                     <span className="text-zinc-100 font-semibold">{s.supplier}</span>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        router.push(`/dashboard/suppliers?select=${encodeURIComponent(s.supplier)}`)
+                                      }}
+                                      title="View supplier deep dive"
+                                      className="px-1.5 py-0.5 text-xs rounded border border-zinc-700 text-zinc-500 hover:text-blue-400 hover:border-blue-500 transition-colors flex-shrink-0"
+                                    >
+                                      ↗
+                                    </button>
                                     <span className="text-zinc-600 text-xs">{s.minerals.length} min</span>
                                   </span>
                                   <span className="text-right w-20">{statusBadge(s.status)}</span>
@@ -632,7 +679,13 @@ export default function BuyersPage() {
                               <th className="sticky left-0 bg-zinc-900 text-left px-4 py-2.5 font-medium w-24 z-10">Month</th>
                               {profile.monthlySupplierTimeline.suppliers.map((s) => (
                                 <th key={s} className="text-right px-3 py-2.5 font-medium whitespace-nowrap" title={s}>
-                                  {s.length > 18 ? s.slice(0, 16) + '…' : s}
+                                  <button
+                                    onClick={() => router.push(`/dashboard/suppliers?select=${encodeURIComponent(s)}`)}
+                                    className="hover:text-blue-400 transition-colors"
+                                    title="View supplier deep dive"
+                                  >
+                                    {s.length > 18 ? s.slice(0, 16) + '…' : s} ↗
+                                  </button>
                                 </th>
                               ))}
                             </tr>
