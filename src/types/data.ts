@@ -230,12 +230,60 @@ export interface TraderProfile {
   totalShipments: number
   totalTons: number
   totalUsd: number
+  totalKg: number                      // NEW
   uniqueSuppliers: number
   firstShipment: string
   lastShipment: string
-  marketSharePct: number                    // NEW: % of total market
-  marketShareTrend: 'growing' | 'declining' | 'stable'  // NEW
-  quarterlyVolume: { quarter: string; usd: number; tons: number }[]
+  daysSinceLast: number                // NEW
+  avgDaysBetweenShipments: number      // NEW
+  avgPriceKg: number                   // NEW: weighted avg price paid per kg
+  marketSharePct: number
+  marketShareTrend: 'growing' | 'declining' | 'stable'
+  marketShareRank: number              // NEW: rank among all buyers by USD
+  totalBuyersInMarket: number          // NEW
+  supplierRetentionRate: number        // NEW: % of prev-year suppliers still active
+
+  // Supplier status counts
+  supplierStatusCounts: {             // NEW
+    active: number
+    new: number
+    atRisk: number
+    dormant: number
+  }
+
+  // Concentration risk
+  concentrationRisk: {                // NEW
+    top1Share: number
+    top3Share: number
+    top5Share: number
+  }
+
+  quarterlyVolume: { quarter: string; usd: number; tons: number; shipments: number }[]
+  monthlyTimeline: { date: string; usd: number; tons: number; shipments: number }[]   // NEW
+  yoyComparison: { year: number; usd: number; tons: number; shipments: number; suppliers: number }[]  // NEW
+
+  mineralBreakdown: {                  // NEW: richer than old pricing power
+    mineral: string
+    usd: number
+    tons: number
+    kg: number
+    share: number                      // % of total USD
+    shipmentCount: number
+    supplierCount: number
+    avgPriceKg: number
+    marketAvgPriceKg: number
+    premiumPct: number                 // negative = pays below market (good for buyer)
+  }[]
+
+  seasonalPattern: { month: string; avgTons: number; avgUsd: number; avgShipments: number }[]  // NEW
+
+  supplierAcquisitionTimeline: {      // NEW: when each supplier relationship started
+    date: string
+    supplier: string
+    mineral: string
+    firstUsd: number
+  }[]
+
   supplierRoster: {
     supplier: string
     totalKg: number
@@ -243,9 +291,13 @@ export interface TraderProfile {
     shipmentCount: number
     firstShipment: string
     lastShipment: string
-    shareOfWallet: number                   // NEW: % of supplier's total
+    daysSinceLast: number             // NEW
+    status: 'Active' | 'New' | 'At-risk' | 'Dormant'  // NEW
+    shareOfWallet: number
     avgUsdPerShipment: number
+    avgPriceKg: number                // NEW
   }[]
+
   newAcquisitions: {
     supplier: string
     firstPurchaseDate: string
@@ -253,18 +305,23 @@ export interface TraderProfile {
     totalKgSince: number
     shipmentsSince: number
   }[]
+
   priceVsMarket: { mineral: string; date: string; traderPrice: number; marketPrice: number }[]
-  pricingPower: { mineral: string; premiumPct: number }[]  // NEW: pays above/below market?
-  aduanaUsage: { aduana: string; count: number; share: number }[]
+  pricingPower: { mineral: string; premiumPct: number }[]
+
+  aduanaUsage: { aduana: string; count: number; share: number; tons: number }[]  // add tons
   lotSizeDistribution: { bucket: string; count: number }[]
+
   supplierMineralBreakdown: {
     supplier: string
-    lastDelivery: string         // most recent date across all minerals
+    lastDelivery: string
     daysSinceLast: number
     totalUsd: number
     totalTons: number
     shipmentCount: number
-    shareOfWallet: number        // % of supplier's total volume going to this buyer
+    shareOfWallet: number
+    status: 'Active' | 'New' | 'At-risk' | 'Dormant'  // NEW
+    avgPriceKg: number               // NEW: overall avg price paid to this supplier
     minerals: {
       mineral: string
       totalUsd: number
@@ -275,8 +332,18 @@ export interface TraderProfile {
       daysSinceLast: number
       avgTonsPerShipment: number
       avgUsdPerKg: number
-      trend: 'growing' | 'falling' | 'stable'  // last 90d vs prev 90d volume
+      trend: 'growing' | 'falling' | 'stable'
     }[]
+  }[]
+
+  recentTransactions: {               // NEW: last 50 shipments
+    date: string
+    supplier: string
+    mineral: string
+    tons: number
+    usd: number
+    usdPerKg: number
+    aduana: string
   }[]
 }
 

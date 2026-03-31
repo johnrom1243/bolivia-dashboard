@@ -246,7 +246,7 @@ export default function SuppliersPage() {
 
                     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
                       <h3 className="text-sm font-semibold text-white mb-3">Mineral Mix</h3>
-                      <ResponsiveContainer width="100%" height={200}>
+                      <ResponsiveContainer width="100%" height={140}>
                         <PieChart>
                           <Pie
                             data={profile.mineralMix}
@@ -254,9 +254,7 @@ export default function SuppliersPage() {
                             nameKey="mineral"
                             cx="50%"
                             cy="50%"
-                            outerRadius={75}
-                            label={({ mineral, share }) => `${mineral} ${(share as number).toFixed(0)}%`}
-                            labelLine={false}
+                            outerRadius={60}
                           >
                             {profile.mineralMix.map((m, i) => (
                               <Cell key={i} fill={mineralColor(m.mineral)} />
@@ -268,6 +266,20 @@ export default function SuppliersPage() {
                           />
                         </PieChart>
                       </ResponsiveContainer>
+                      <div className="space-y-1 mt-2">
+                        {profile.mineralMix.map((m) => (
+                          <div key={m.mineral} className="flex items-center justify-between text-xs">
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full inline-block" style={{ background: mineralColor(m.mineral) }} />
+                              <span className="text-zinc-300">{m.mineral}</span>
+                            </span>
+                            <div className="flex gap-3 tabular-nums text-zinc-400">
+                              <span>{m.share.toFixed(1)}%</span>
+                              <span>{fmtTons(m.tons)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
 

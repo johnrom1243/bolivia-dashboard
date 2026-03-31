@@ -549,6 +549,310 @@ export async function GET(req: NextRequest) {
       buffer = await buildWorkbook([sheet1, sheet2, sheet3, sheet4, sheet5, sheet6])
       filename = `supplier_${supplierName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`
 
+    } else if (type === 'buyer') {
+      const buyerName = params.get('buyer') ?? ''
+      if (!buyerName) {
+        return NextResponse.json({ error: 'buyer param required' }, { status: 400 })
+      }
+      const sub = filtered.filter((r) => r.buyer === buyerName)
+      if (!sub.length) {
+        return NextResponse.json({ error: 'Buyer not found' }, { status: 404 })
+      }
+      const todayMsB = Date.now()
+
+      // Totals
+      const bTotalUsd = sub.reduce((a, r) => a + r.usd, 0)
+      const bTotalTons = sub.reduce((a, r) => a + r.tons, 0)
+      const bTotalKg = sub.reduce((a, r) => a + r.kg, 0)
+      const bDates = sub.map((r) => r.Date).sort()
+      const bFirstShipment = bDates[0]
+      const bLastShipment = bDates[bDates.length - 1]
+      const bDaysSinceLast = Math.round((todayMsB - new Date(bLastShipment).getTime()) / 86400000)
+      const bAvgPriceKg = bTotalKg > 0 ? bTotalUsd / bTotalKg : 0
+
+      // Market share & rank
+      const bAllUsd = all.reduce((a, r) => a + r.usd, 0)
+      const bMarketShare = bAllUsd > 0 ? (bTotalUsd / bAllUsd) * 100 : 0
+      const bBuyerUsdMap: Record<string, number> = {}
+      for (const r of all) bBuyerUsdMap[r.buyer] = (bBuyerUsdMap[r.buyer] || 0) + r.usd
+      const bSortedBuyers = Object.entries(bBuyerUsdMap).sort((a, b) => b[1] - a[1])
+      const bRank = bSortedBuyers.findIndex(([b]) => b === buyerName) + 1
+      const bTotalBuyers = bSortedBuyers.length
+
+      // Supplier retention
+      const bYears = [...new Set(sub.map((r) => r.year))].sort()
+      let bRetentionRate = 0
+      if (bYears.length >= 2) {
+        const mostRecentYear = bYears[bYears.length - 1]
+        const prevYear = bYears[bYears.length - 2]
+        const prevYearSups = new Set(sub.filter((r) => r.year === prevYear).map((r) => r.supplier))
+        const recentYearSups = new Set(sub.filter((r) => r.year === mostRecentYear).map((r) => r.supplier))
+        const retained = [...prevYearSups].filter((s) => recentYearSups.has(s)).length
+        bRetentionRate = prevYearSups.size > 0 ? (retained / prevYearSups.size) * 100 : 0
+      }
+
+      // Sheet 1: Summary
+      const bSummaryRows = [
+        { metric: 'Buyer', value: buyerName },
+        { metric: 'Total USD', value: Math.round(bTotalUsd) },
+        { metric: 'Total Tons', value: Math.round(bTotalTons * 100) / 100 },
+        { metric: 'Total KG', value: Math.round(bTotalKg) },
+        { metric: 'Total Shipments', value: sub.length },
+        { metric: 'Unique Suppliers', value: new Set(sub.map((r) => r.supplier)).size },
+        { metric: 'Market Share %', value: Math.round(bMarketShare * 100) / 100 },
+        { metric: 'Market Rank', value: `#${bRank} of ${bTotalBuyers}` },
+        { metric: 'First Shipment', value: bFirstShipment },
+        { metric: 'Last Shipment', value: bLastShipment },
+        { metric: 'Days Since Last', value: bDaysSinceLast },
+        { metric: 'Avg Price/KG', value: Math.round(bAvgPriceKg * 1000) / 1000 },
+        { metric: 'Supplier Retention Rate %', value: Math.round(bRetentionRate * 10) / 10 },
+      ]
+      const bSheet1: import('@/lib/export').SheetDef = {
+        name: 'Summary',
+        title: `Buyer Profile — ${buyerName}`,
+        columns: [
+          { header: 'Metric', key: 'metric', width: 30 },
+          { header: 'Value', key: 'value', width: 28 },
+        ],
+        rows: bSummaryRows as Record<string, unknown>[],
+      }
+
+      // Sheet 2: Supplier Roster
+      const bSupplierMap: Record<string, { totalUsd: number; totalTons: number; totalKg: number; shipments: number; first: string; last: string }> = {}
+      const bSupplierTotals: Record<string, number> = {}
+      for (const r of all) bSupplierTotals[r.supplier] = (bSupplierTotals[r.supplier] || 0) + r.usd
+      for (const r of sub) {
+        if (!bSupplierMap[r.supplier]) bSupplierMap[r.supplier] = { totalUsd: 0, totalTons: 0, totalKg: 0, shipments: 0, first: r.Date, last: r.Date }
+        bSupplierMap[r.supplier].totalUsd += r.usd; bSupplierMap[r.supplier].totalTons += r.tons
+        bSupplierMap[r.supplier].totalKg += r.kg; bSupplierMap[r.supplier].shipments++
+        if (r.Date < bSupplierMap[r.supplier].first) bSupplierMap[r.supplier].first = r.Date
+        if (r.Date > bSupplierMap[r.supplier].last) bSupplierMap[r.supplier].last = r.Date
+      }
+      const bSheet2Rows = Object.entries(bSupplierMap)
+        .sort((a, b) => b[1].totalUsd - a[1].totalUsd)
+        .map(([supplier, v]) => {
+          const dsl = Math.round((todayMsB - new Date(v.last).getTime()) / 86400000)
+          const ageMs = todayMsB - new Date(v.first).getTime()
+          let status = 'Dormant'
+          if (dsl < 90 && ageMs / 86400000 < 180) status = 'New'
+          else if (dsl < 90) status = 'Active'
+          else if (dsl < 180) status = 'At-risk'
+          return {
+            supplier,
+            totalUsd: Math.round(v.totalUsd),
+            totalTons: Math.round(v.totalTons * 100) / 100,
+            totalKg: Math.round(v.totalKg),
+            shipments: v.shipments,
+            firstShipment: v.first,
+            lastShipment: v.last,
+            daysSinceLast: dsl,
+            status,
+            shareOfWallet: bSupplierTotals[supplier] > 0 ? Math.round((v.totalUsd / bSupplierTotals[supplier]) * 1000) / 10 : 0,
+            avgPriceKg: v.totalKg > 0 ? Math.round((v.totalUsd / v.totalKg) * 1000) / 1000 : 0,
+          }
+        })
+      const bSheet2: import('@/lib/export').SheetDef = {
+        name: 'Supplier Roster',
+        title: 'Supplier Roster',
+        columns: [
+          { header: 'Supplier', key: 'supplier', width: 32 },
+          { header: 'Total USD', key: 'totalUsd', width: 16 },
+          { header: 'Total Tons', key: 'totalTons', width: 14 },
+          { header: 'Total KG', key: 'totalKg', width: 14 },
+          { header: 'Shipments', key: 'shipments', width: 12 },
+          { header: 'First Shipment', key: 'firstShipment', width: 16 },
+          { header: 'Last Shipment', key: 'lastShipment', width: 16 },
+          { header: 'Days Since Last', key: 'daysSinceLast', width: 16 },
+          { header: 'Status', key: 'status', width: 12 },
+          { header: 'Wallet Share %', key: 'shareOfWallet', width: 16 },
+          { header: 'Avg Price/KG', key: 'avgPriceKg', width: 14 },
+        ],
+        rows: bSheet2Rows as Record<string, unknown>[],
+      }
+
+      // Sheet 3: Supplier × Mineral
+      const bSmMap: Record<string, Record<string, { usd: number; tons: number; shipments: number; first: string; last: string; recent90: number; prev90: number }>> = {}
+      for (const r of sub) {
+        if (!bSmMap[r.supplier]) bSmMap[r.supplier] = {}
+        if (!bSmMap[r.supplier][r.mineral]) bSmMap[r.supplier][r.mineral] = { usd: 0, tons: 0, shipments: 0, first: r.Date, last: r.Date, recent90: 0, prev90: 0 }
+        const bsm = bSmMap[r.supplier][r.mineral]
+        bsm.usd += r.usd; bsm.tons += r.tons; bsm.shipments++
+        if (r.Date < bsm.first) bsm.first = r.Date
+        if (r.Date > bsm.last) bsm.last = r.Date
+        const rMs = new Date(r.Date).getTime()
+        if (rMs >= todayMsB - 90 * 86400000) bsm.recent90 += r.tons
+        else if (rMs >= todayMsB - 180 * 86400000) bsm.prev90 += r.tons
+      }
+      const bSheet3Rows = Object.entries(bSmMap).flatMap(([supplier, minerals]) =>
+        Object.entries(minerals).map(([mineral, v]) => {
+          let trend = 'stable'
+          if (v.prev90 > 0) { if (v.recent90 > v.prev90 * 1.1) trend = 'growing'; else if (v.recent90 < v.prev90 * 0.9) trend = 'falling' }
+          return {
+            supplier, mineral,
+            totalUsd: Math.round(v.usd),
+            totalTons: Math.round(v.tons * 100) / 100,
+            shipments: v.shipments,
+            firstDelivery: v.first,
+            lastDelivery: v.last,
+            daysSinceLast: Math.round((todayMsB - new Date(v.last).getTime()) / 86400000),
+            avgTonsPerShipment: v.shipments > 0 ? Math.round((v.tons / v.shipments) * 100) / 100 : 0,
+            avgUsdPerKg: v.tons > 0 ? Math.round((v.usd / (v.tons * 1000)) * 1000) / 1000 : 0,
+            trend,
+          }
+        })
+      ).sort((a, b) => b.totalUsd - a.totalUsd)
+      const bSheet3: import('@/lib/export').SheetDef = {
+        name: 'Supplier x Mineral',
+        title: 'Supplier × Mineral Breakdown',
+        columns: [
+          { header: 'Supplier', key: 'supplier', width: 32 },
+          { header: 'Mineral', key: 'mineral', width: 18 },
+          { header: 'Total USD', key: 'totalUsd', width: 16 },
+          { header: 'Total Tons', key: 'totalTons', width: 14 },
+          { header: 'Shipments', key: 'shipments', width: 12 },
+          { header: 'First Delivery', key: 'firstDelivery', width: 16 },
+          { header: 'Last Delivery', key: 'lastDelivery', width: 16 },
+          { header: 'Days Since Last', key: 'daysSinceLast', width: 16 },
+          { header: 'Avg Tons/Ship', key: 'avgTonsPerShipment', width: 16 },
+          { header: 'Avg USD/KG', key: 'avgUsdPerKg', width: 14 },
+          { header: 'Trend', key: 'trend', width: 12 },
+        ],
+        rows: bSheet3Rows as Record<string, unknown>[],
+      }
+
+      // Sheet 4: Mineral Breakdown
+      const bMineralMap: Record<string, { usd: number; tons: number; kg: number; shipments: number; suppliers: Set<string> }> = {}
+      const bMktMineralMap: Record<string, { usd: number; kg: number }> = {}
+      for (const r of all) {
+        if (!bMktMineralMap[r.mineral]) bMktMineralMap[r.mineral] = { usd: 0, kg: 0 }
+        bMktMineralMap[r.mineral].usd += r.usd; bMktMineralMap[r.mineral].kg += r.kg
+      }
+      for (const r of sub) {
+        if (!bMineralMap[r.mineral]) bMineralMap[r.mineral] = { usd: 0, tons: 0, kg: 0, shipments: 0, suppliers: new Set() }
+        bMineralMap[r.mineral].usd += r.usd; bMineralMap[r.mineral].tons += r.tons
+        bMineralMap[r.mineral].kg += r.kg; bMineralMap[r.mineral].shipments++
+        bMineralMap[r.mineral].suppliers.add(r.supplier)
+      }
+      const bSheet4Rows = Object.entries(bMineralMap)
+        .sort((a, b) => b[1].usd - a[1].usd)
+        .map(([mineral, v]) => {
+          const avgPriceKg = v.kg > 0 ? v.usd / v.kg : 0
+          const mkt = bMktMineralMap[mineral]
+          const mktAvg = mkt && mkt.kg > 0 ? mkt.usd / mkt.kg : 0
+          const premiumPct = mktAvg > 0 ? ((avgPriceKg - mktAvg) / mktAvg) * 100 : 0
+          return {
+            mineral,
+            usd: Math.round(v.usd),
+            tons: Math.round(v.tons * 100) / 100,
+            sharePct: bTotalUsd > 0 ? Math.round((v.usd / bTotalUsd) * 1000) / 10 : 0,
+            shipmentCount: v.shipments,
+            supplierCount: v.suppliers.size,
+            avgPriceKg: Math.round(avgPriceKg * 1000) / 1000,
+            marketAvgPriceKg: Math.round(mktAvg * 1000) / 1000,
+            premiumPct: Math.round(premiumPct * 10) / 10,
+          }
+        })
+      const bSheet4: import('@/lib/export').SheetDef = {
+        name: 'Mineral Breakdown',
+        title: 'Mineral Breakdown',
+        columns: [
+          { header: 'Mineral', key: 'mineral', width: 18 },
+          { header: 'USD', key: 'usd', width: 16 },
+          { header: 'Tons', key: 'tons', width: 14 },
+          { header: 'Share %', key: 'sharePct', width: 12 },
+          { header: 'Shipments', key: 'shipmentCount', width: 12 },
+          { header: 'Suppliers', key: 'supplierCount', width: 12 },
+          { header: 'Avg Price/KG', key: 'avgPriceKg', width: 14 },
+          { header: 'Market Avg/KG', key: 'marketAvgPriceKg', width: 16 },
+          { header: 'Premium %', key: 'premiumPct', width: 14 },
+        ],
+        rows: bSheet4Rows as Record<string, unknown>[],
+      }
+
+      // Sheet 5: Monthly Timeline
+      const bMonthlyMap: Record<string, { usd: number; tons: number; shipments: number }> = {}
+      for (const r of sub) {
+        const mo = r.Date.slice(0, 7)
+        if (!bMonthlyMap[mo]) bMonthlyMap[mo] = { usd: 0, tons: 0, shipments: 0 }
+        bMonthlyMap[mo].usd += r.usd; bMonthlyMap[mo].tons += r.tons; bMonthlyMap[mo].shipments++
+      }
+      const bSheet5Rows = Object.entries(bMonthlyMap)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, v]) => ({ date, usd: Math.round(v.usd), tons: Math.round(v.tons * 100) / 100, shipments: v.shipments }))
+      const bSheet5: import('@/lib/export').SheetDef = {
+        name: 'Monthly Timeline',
+        title: 'Monthly Timeline',
+        columns: [
+          { header: 'Month', key: 'date', width: 14 },
+          { header: 'USD', key: 'usd', width: 16 },
+          { header: 'Tons', key: 'tons', width: 14 },
+          { header: 'Shipments', key: 'shipments', width: 12 },
+        ],
+        rows: bSheet5Rows as Record<string, unknown>[],
+      }
+
+      // Sheet 6: Seasonal Pattern
+      const bSeasonMap: Record<number, { usdSum: number; tonsSum: number; shipSum: number; yearSet: Set<number> }> = {}
+      const bMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      for (const r of sub) {
+        const mn = r.month_num
+        if (!bSeasonMap[mn]) bSeasonMap[mn] = { usdSum: 0, tonsSum: 0, shipSum: 0, yearSet: new Set() }
+        bSeasonMap[mn].usdSum += r.usd; bSeasonMap[mn].tonsSum += r.tons; bSeasonMap[mn].shipSum++
+        bSeasonMap[mn].yearSet.add(r.year)
+      }
+      const bSheet6Rows = Array.from({ length: 12 }, (_, i) => {
+        const mn = i + 1
+        const d = bSeasonMap[mn]
+        const count = d ? d.yearSet.size : 0
+        return {
+          month: bMonthNames[i],
+          avgTons: d && count > 0 ? Math.round((d.tonsSum / count) * 100) / 100 : 0,
+          avgUsd: d && count > 0 ? Math.round(d.usdSum / count) : 0,
+          avgShipments: d && count > 0 ? Math.round((d.shipSum / count) * 10) / 10 : 0,
+        }
+      })
+      const bSheet6: import('@/lib/export').SheetDef = {
+        name: 'Seasonal Pattern',
+        title: 'Seasonal Buying Pattern',
+        columns: [
+          { header: 'Month', key: 'month', width: 12 },
+          { header: 'Avg Tons', key: 'avgTons', width: 14 },
+          { header: 'Avg USD', key: 'avgUsd', width: 16 },
+          { header: 'Avg Shipments', key: 'avgShipments', width: 16 },
+        ],
+        rows: bSheet6Rows as Record<string, unknown>[],
+      }
+
+      // Sheet 7: Transactions
+      const bSheet7Rows = [...sub]
+        .sort((a, b) => b.Date.localeCompare(a.Date))
+        .map((r) => ({
+          date: r.Date,
+          supplier: r.supplier,
+          mineral: r.mineral,
+          tons: Math.round(r.tons * 100) / 100,
+          usd: Math.round(r.usd),
+          usdPerKg: Math.round(r.usd_per_kg * 1000) / 1000,
+          aduana: r.aduana ?? '',
+        }))
+      const bSheet7: import('@/lib/export').SheetDef = {
+        name: 'Transactions',
+        title: 'All Transactions',
+        columns: [
+          { header: 'Date', key: 'date', width: 14 },
+          { header: 'Supplier', key: 'supplier', width: 32 },
+          { header: 'Mineral', key: 'mineral', width: 18 },
+          { header: 'Tons', key: 'tons', width: 14 },
+          { header: 'USD', key: 'usd', width: 16 },
+          { header: 'USD/KG', key: 'usdPerKg', width: 14 },
+          { header: 'Customs Post', key: 'aduana', width: 24 },
+        ],
+        rows: bSheet7Rows as Record<string, unknown>[],
+      }
+
+      buffer = await buildWorkbook([bSheet1, bSheet2, bSheet3, bSheet4, bSheet5, bSheet6, bSheet7])
+      filename = `buyer_${buyerName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`
+
     } else if (type === 'logistics') {
       const routeMap2: Record<string, { sum: number; n: number }> = {}
       for (const r of filtered) {
