@@ -1,0 +1,71 @@
+# Upload a new PowerBI Excel export into the data/ folder on GitHub
+# (Add file → Upload files) and this workflow converts it into
+# data/bolivia_data.json and commits it. Vercel then redeploys the site.
+name: Convert uploaded Excel data
+
+on:
+  push:
+    branches: [main]
+    paths: ['data/*.xlsx']
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: convert-data
+  cancel-in-progress: false
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pandas openpyxl
+
+      - name: Pick the uploaded file and give it the standard name
+        id: pick
+        run: |
+          before="${{ github.event.before }}"
+          file=""
+          if [ -n "$before" ] && [ "$before" != "0000000000000000000000000000000000000000" ]; then
+            file=$(git diff --name-only --diff-filter=AM "$before" "${{ github.sha }}" -- 'data/*.xlsx' | head -n 1)
+          fi
+          # Manual run or nothing found: use the newest xlsx in data/
+          if [ -z "$file" ]; then
+            file=$(git log -1 --name-only --pretty=format: -- 'data/*.xlsx' | grep '\.xlsx$' | head -n 1)
+          fi
+          if [ -z "$file" ] || [ ! -f "$file" ]; then
+            echo "No Excel file found in data/"; exit 1
+          fi
+          echo "Using: $file"
+          if [ "$file" != "data/bolivia_export.xlsx" ]; then
+            git mv -f "$file" data/bolivia_export.xlsx
+          fi
+          # Remove any other stray uploads so only one source file is kept
+          for f in data/*.xlsx; do
+            [ "$f" = "data/bolivia_export.xlsx" ] || git rm -q "$f"
+          done
+
+      - name: Convert to JSON
+        run: python scripts/convert_excel.py data/bolivia_export.xlsx
+
+      - name: Commit converted data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898+github-actions[bot]@users.noreply.github.com"
+          git add -A data/
+          if git diff --cached --quiet; then
+            echo "Nothing changed"; exit 0
+          fi
+          months=$(python -c "import json;d=json.load(open('data/bolivia_data.json'));m=sorted(r['Date'][:7] for r in d);print(m[0]+' to '+m[-1])")
+          git commit -m "Update market data ($months) from uploaded Excel"
+          git push

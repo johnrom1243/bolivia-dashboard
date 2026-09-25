@@ -13,6 +13,7 @@ export interface DataRow {
   month_name: string
   Quarter: string       // e.g. "2024Q1"
   aduana?: string       // customs post
+  buyer_country?: string // importing company's country (from the Excel export)
 }
 
 // ─── Filter parameters (shared by all API routes) ─────────────────────────
@@ -389,6 +390,7 @@ export interface TraderProfile {
     }[]
     winsFromPenfold: { supplier: string; mineral: string; firstMonth: string; usdSince: number; outcome: string; penfoldShareBefore: number | null }[]
   }
+  country: string                     // most common buyer_country on this buyer's shipments
 }
 
 // ─── Market evolution ──────────────────────────────────────────────────────

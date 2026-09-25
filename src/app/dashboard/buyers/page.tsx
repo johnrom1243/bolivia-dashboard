@@ -238,6 +238,11 @@ export default function BuyersPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h1 className="text-2xl font-bold text-white">{profile.name}</h1>
+                    {profile.country && (
+                      <span className="px-2 py-0.5 rounded border border-zinc-700 text-zinc-400 text-xs" title="Destination country on this buyer's shipments">
+                        ships to {profile.country}
+                      </span>
+                    )}
                     {isPenfold && (
                       <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30 text-xs font-medium">
                         ★ Your Company

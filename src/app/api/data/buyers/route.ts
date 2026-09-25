@@ -542,6 +542,7 @@ export async function GET(req: NextRequest) {
       supplierMineralBreakdown,
       recentTransactions,
       penfoldOverlap: buildPenfoldOverlap(all, buyerName, filters.minerals),
+      country: mostCommon(sub.map((r) => r.buyer_country ?? '').filter(Boolean)),
     }
 
     return NextResponse.json(profile)
@@ -617,4 +618,12 @@ function buildPenfoldOverlap(all: DataRow[], buyer: string, minerals?: string[])
     shared,
     winsFromPenfold: wins,
   }
+}
+
+function mostCommon(values: string[]): string {
+  const counts = new Map<string, number>()
+  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1)
+  let best = '', n = 0
+  for (const [v, c] of counts) if (c > n) { best = v; n = c }
+  return best
 }
