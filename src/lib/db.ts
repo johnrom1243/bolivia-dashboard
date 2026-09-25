@@ -91,9 +91,11 @@ function normalise(rows: DataRow[]): DataRow[] {
     const usd = Number(r.usd) || 0
     const tons = Number(r.tons) || kg / 1000
     const usd_per_kg = usd > 0 && kg > 0 ? usd / kg : 0
-    const d = new Date(date)
-    const year = d.getFullYear()
-    const month_num = d.getMonth() + 1
+    // Parse year/month from the ISO string itself: Date getters use the server's
+    // local timezone, which shifts '2022-01-01' into Dec 2021 west of UTC.
+    const year = Number(date.slice(0, 4))
+    const month_num = Number(date.slice(5, 7))
+    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
     return {
       ...r,
@@ -104,7 +106,7 @@ function normalise(rows: DataRow[]): DataRow[] {
       usd_per_kg,
       year,
       month_num,
-      month_name: r.month_name || d.toLocaleString('en', { month: 'long' }),
+      month_name: r.month_name || MONTHS[month_num - 1],
       Quarter: r.Quarter || `${year}Q${Math.ceil(month_num / 3)}`,
     }
   }).filter((r) => !isNaN(new Date(r.Date).getTime()))

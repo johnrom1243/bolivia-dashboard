@@ -6,6 +6,7 @@ import { KpiCard } from '@/components/KpiCard'
 import { ExportButton } from '@/components/ExportButton'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { G } from '@/lib/glossary'
+import { monthLabel } from '@/lib/period'
 import { fmtUsd, fmtTons, fmtNum, mineralColor } from '@/lib/utils'
 import type { KpiData } from '@/types/data'
 import {
@@ -56,7 +57,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Row 1: Primary KPI cards (8) ───────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 2xl:grid-cols-8 gap-3">
         <KpiCard label="Total Shipments" value={fmtNum(data.totalShipments)} icon="📦" accent="blue" info={G.totalShipments} />
         <KpiCard
           label="Total USD"
@@ -118,10 +119,13 @@ export default function DashboardPage() {
           <div key={rm.period} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center text-xs text-zinc-500 uppercase tracking-wider">
-                Last {rm.period}
+                {rm.months === 1 ? 'Latest month' : `Last ${rm.months} months`}
                 <InfoTooltip {...G.rollingWindow} />
               </div>
-              <div className="text-xs text-zinc-600">vs prev {rm.period}</div>
+              <div className="text-xs text-zinc-600">
+                {rm.months === 1 ? monthLabel(rm.curEnd) : `${monthLabel(rm.curStart)} – ${monthLabel(rm.curEnd)}`}
+                {' '}vs {rm.months === 1 ? monthLabel(rm.prevEnd) : `${monthLabel(rm.prevStart)} – ${monthLabel(rm.prevEnd)}`}
+              </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <RollingCell label="Tons" value={fmtTons(rm.tons)} change={rm.changeTons} />

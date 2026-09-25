@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
       const lastDateStr = sorted[sorted.length - 1][0]
       for (let f = 1; f <= 3; f++) {
         const d = new Date(lastDateStr + '-01')
-        d.setMonth(d.getMonth() + f)
+        d.setUTCMonth(d.getUTCMonth() + f)
         const forecastDate = d.toISOString().slice(0, 7)
         const forecast = slope * (xs.length - 1 + f) + intercept
         priceForecast.push({

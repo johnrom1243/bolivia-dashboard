@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import { buildQuery } from '@/lib/utils'
 
 export interface FilterState {
@@ -50,7 +51,9 @@ function computeQuery(s: typeof defaultState): string {
   })
 }
 
-export const useFilters = create<FilterState>((set, get) => ({
+// Persisted per browser tab (sessionStorage). skipHydration avoids SSR mismatches;
+// FilterPanel calls useFilters.persist.rehydrate() on mount.
+export const useFilters = create<FilterState>()(persist((set) => ({
   ...defaultState,
   queryString: '',
 
@@ -104,4 +107,18 @@ export const useFilters = create<FilterState>((set, get) => ({
 
   reset: () =>
     set({ ...defaultState, queryString: '' }),
+}), {
+  name: 'bolivia-filters',
+  storage: createJSONStorage(() => sessionStorage),
+  skipHydration: true,
+  partialize: (s) => ({
+    yearMin: s.yearMin, yearMax: s.yearMax, months: s.months, minerals: s.minerals,
+    supplierSearch: s.supplierSearch, buyerSearch: s.buyerSearch,
+    excludePenfold: s.excludePenfold, onlyPenfold: s.onlyPenfold, topN: s.topN,
+  }),
+  // queryString is derived — rebuild it from the restored values
+  merge: (persisted, current) => {
+    const n = { ...current, ...(persisted as Partial<FilterState>) }
+    return { ...n, queryString: computeQuery(n) }
+  },
 }))

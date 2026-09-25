@@ -96,6 +96,8 @@ Change passwords by updating the env vars in Vercel and redeploying.
 | Route | Description |
 |-------|-------------|
 | `/dashboard` | KPI Overview — market health, top movers, rolling windows |
+| `/dashboard/watch` | Penfold Watch — which Penfold suppliers sell to competitors (Lost / Leaking / Split), by mineral |
+| `/dashboard/wins` | Competitor Wins — new buyer ← supplier × mineral relationships and where the volume came from |
 | `/dashboard/predator` | Predator Engine v4 — vulnerability scoring |
 | `/dashboard/poach` | Poach Index — supplier poachability with tiers A/B/C |
 | `/dashboard/loyalty` | Loyalty Analysis — trajectory, at-risk, cohort |

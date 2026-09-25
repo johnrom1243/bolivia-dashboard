@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     if (!mineralRows.length) return NextResponse.json([])
 
     const todayMs = Math.max(...all.map((r) => new Date(r.Date).getTime()))
-    const currentYear = new Date(todayMs).getFullYear()
+    const currentYear = new Date(todayMs).getUTCFullYear()
 
     // Market avg price for this mineral
     const marketPrices = mineralRows.filter((r) => r.usd_per_kg > 0).map((r) => r.usd_per_kg)
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
 
       // Status
       let status: MineralHitListRow['status']
-      if (firstDate.getFullYear() === currentYear && daysInactive <= STATUS_CUTOFFS.HOT) {
+      if (firstDate.getUTCFullYear() === currentYear && daysInactive <= STATUS_CUTOFFS.HOT) {
         status = 'NEW ENTRY'
       } else if (daysInactive <= STATUS_CUTOFFS.NEW_ENTRY) {
         status = 'HOT LEAD'

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getData, applyFilters, parseFilters } from '@/lib/db'
 import type { KpiData } from '@/types/data'
+import { latestMonth, monthKey, windows, isPenfold } from '@/lib/period'
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,17 +17,18 @@ export async function GET(req: NextRequest) {
     const dataDateRange = { min: allDates[0], max: allDates[allDates.length - 1] }
 
     // ── Reference date = latest date in dataset (not wall-clock today) ────────
-    const refMs = Math.max(...all.map((r) => new Date(r.Date).getTime()))
-    const refDate = new Date(refMs)
+    const refMonth = latestMonth(all)
 
     // ── YoY calculation ───────────────────────────────────────────────────────
     const years = [...new Set(filtered.map((r) => r.year))].sort()
     const currentYear = years[years.length - 1]
     const prevYear = currentYear - 1
     const currentYearRows = filtered.filter((r) => r.year === currentYear)
-    const prevYearRows = all.filter((r) => r.year === prevYear)
+    // Prior year must respect the same mineral/supplier/buyer filters (but not the year range)
+    const prevYearRows = applyFilters(all, { ...filters, yearMin: undefined, yearMax: undefined })
+      .filter((r) => r.year === prevYear)
 
-    const isIncomplete = currentYear === refDate.getFullYear() && refDate.getMonth() < 11
+    const isIncomplete = currentYear === Number(refMonth.slice(0, 4)) && Number(refMonth.slice(5, 7)) < 12
     const maxMonth = Math.max(...currentYearRows.map((r) => r.month_num))
     const prevComparableRows = isIncomplete
       ? prevYearRows.filter((r) => r.month_num <= maxMonth)
@@ -48,7 +50,7 @@ export async function GET(req: NextRequest) {
 
     // ── Penfold share ─────────────────────────────────────────────────────────
     const penfoldUsd = filtered
-      .filter((r) => r.buyer.toLowerCase().includes('penfold'))
+      .filter((r) => isPenfold(r.buyer))
       .reduce((a, r) => a + r.usd, 0)
     const penfoldSharePct = totalUsd > 0 ? (penfoldUsd / totalUsd) * 100 : 0
 
@@ -180,15 +182,11 @@ export async function GET(req: NextRequest) {
       .map(({ name, currentUsd, change, usdDelta }) => ({ name, currentUsd, change, usdDelta }))
 
     // ── Rolling metrics with period-over-period comparison ────────────────────
-    const todayMs = refMs
-    const rollingMetrics = ([30, 90, 180] as const).map((days) => {
-      const cutMs = todayMs - days * 86400000
-      const prevCutMs = cutMs - days * 86400000
-      const periodRows = filtered.filter((r) => new Date(r.Date).getTime() >= cutMs)
-      const prevPeriodRows = filtered.filter((r) => {
-        const t = new Date(r.Date).getTime()
-        return t >= prevCutMs && t < cutMs
-      })
+    // Data is monthly, so windows are whole calendar months ending at the latest month.
+    const rollingMetrics = ([[1, '1M'], [3, '3M'], [6, '6M']] as const).map(([n, period]) => {
+      const w = windows(refMonth, n)
+      const periodRows = filtered.filter((r) => { const m = monthKey(r.Date); return m >= w.curStart && m <= w.curEnd })
+      const prevPeriodRows = filtered.filter((r) => { const m = monthKey(r.Date); return m >= w.prevStart && m <= w.prevEnd })
       const tons = periodRows.reduce((a, r) => a + r.tons, 0)
       const usd = periodRows.reduce((a, r) => a + r.usd, 0)
       const shipments = periodRows.length
@@ -196,7 +194,12 @@ export async function GET(req: NextRequest) {
       const prevUsdVal = prevPeriodRows.reduce((a, r) => a + r.usd, 0)
       const prevShipmentsVal = prevPeriodRows.length
       return {
-        period: `${days}d` as '30d' | '90d' | '180d',
+        period,
+        months: n,
+        curStart: w.curStart,
+        curEnd: w.curEnd,
+        prevStart: w.prevStart,
+        prevEnd: w.prevEnd,
         tons: Math.round(tons * 100) / 100,
         usd: Math.round(usd),
         shipments,
@@ -233,19 +236,14 @@ export async function GET(req: NextRequest) {
       : 0
     const priceVolatilityPct = priceMean > 0 ? (priceStd / priceMean) * 100 : 0
 
-    // New entrant rate
+    // New entrant rate: suppliers active in the last 3 months who were absent the 3 months before
+    const w3 = windows(refMonth, 3)
     const prevQSuppliers = new Set(
-      filtered.filter((r) => {
-        const cutMs2 = todayMs - 6 * 30 * 86400000
-        const startMs = todayMs - 3 * 30 * 86400000
-        const t = new Date(r.Date).getTime()
-        return t >= cutMs2 && t < startMs
-      }).map((r) => r.supplier),
+      filtered.filter((r) => { const m = monthKey(r.Date); return m >= w3.prevStart && m <= w3.prevEnd })
+        .map((r) => r.supplier),
     )
     const currentQSuppliers = new Set(
-      filtered
-        .filter((r) => new Date(r.Date).getTime() >= todayMs - 3 * 30 * 86400000)
-        .map((r) => r.supplier),
+      filtered.filter((r) => monthKey(r.Date) >= w3.curStart).map((r) => r.supplier),
     )
     const newEntrants = [...currentQSuppliers].filter((s) => !prevQSuppliers.has(s))
     const newEntrantRate = currentQSuppliers.size > 0

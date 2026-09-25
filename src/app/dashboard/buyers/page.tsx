@@ -1,13 +1,16 @@
 'use client'
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { useFilters } from '@/store/filters'
+import { useSessionState } from '@/hooks/useSessionState'
 import { ExportButton } from '@/components/ExportButton'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { G } from '@/lib/glossary'
 import { fmtUsd, fmtTons, fmtNum, cn, mineralColor } from '@/lib/utils'
 import type { TraderProfile } from '@/types/data'
+import { monthLabel } from '@/lib/period'
+import Link from 'next/link'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, LineChart, Line, Legend, Cell, AreaChart, Area,
@@ -72,11 +75,13 @@ function SelectFromUrl({
 }: {
   onSelect: (name: string) => void
 }) {
-  const searchParams = useSearchParams()
+  const name = useSearchParams().get('select')
+  // Keep the latest callback without re-running the effect on every render
+  const cb = useRef(onSelect)
+  cb.current = onSelect
   useEffect(() => {
-    const name = searchParams.get('select')
-    if (name) onSelect(decodeURIComponent(name))
-  }, [searchParams, onSelect])
+    if (name) cb.current(name)
+  }, [name])
   return null
 }
 
@@ -84,10 +89,12 @@ function SelectFromUrl({
 export default function BuyersPage() {
   const { queryString } = useFilters()
   const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState<string>('')
-  const [activeTab, setActiveTab] = useState<Tab>('overview')
+  // Persisted for the browser tab; a ?select= link (cross-navigation / search) wins over the stored company
+  const hasUrlSelect = () => new URLSearchParams(window.location.search).has('select')
+  const [selected, setSelected] = useSessionState<string>('buy:selected', '', { skipRestore: hasUrlSelect })
+  const [activeTab, setActiveTab] = useSessionState<Tab>('buy:tab', 'overview', { skipRestore: hasUrlSelect })
   const [activeMineral, setActiveMineral] = useState<string>('')
-  const [mineralFilter, setMineralFilter] = useState<string>('')
+  const [mineralFilter, setMineralFilter] = useSessionState<string>('buy:mineral', '', { skipRestore: hasUrlSelect })
   const [expandedSuppliers, setExpandedSuppliers] = useState<Set<string>>(new Set())
   const [smSort, setSmSort] = useState<'date' | 'value' | 'volume'>('date')
   const [smSearch, setSmSearch] = useState('')
@@ -95,6 +102,7 @@ export default function BuyersPage() {
   const [txSort, setTxSort] = useState<{ col: string; dir: 1 | -1 }>({ col: 'date', dir: -1 })
 
   const router = useRouter()
+
 
   const { data: list } = useQuery<{ name: string; tons: number; usd: number; shipments: number }[]>({
     queryKey: ['buyers-list', queryString],
@@ -194,7 +202,10 @@ export default function BuyersPage() {
           {filteredList.map((b) => (
             <button
               key={b.name}
-              onClick={() => { setSelected(b.name); setActiveTab('overview'); setActiveMineral(''); setMineralFilter('') }}
+              onClick={() => {
+                setSelected(b.name); setActiveTab('overview'); setActiveMineral(''); setMineralFilter('')
+                if (window.location.search.includes('select=')) router.replace('/dashboard/buyers', { scroll: false })
+              }}
               className={cn(
                 'w-full text-left px-3 py-2.5 border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors',
                 selected === b.name && 'bg-blue-900/30 border-l-2 border-l-blue-500',
@@ -234,7 +245,7 @@ export default function BuyersPage() {
                     )}
                   </div>
                   <p className="text-zinc-400 text-sm mt-1">
-                    {profile.firstShipment} → {profile.lastShipment} · {profile.totalShipments} shipments
+                    {monthLabel(profile.firstShipment.slice(0, 7))} → {monthLabel(profile.lastShipment.slice(0, 7))} · {profile.totalShipments} shipments
                   </p>
                 </div>
               </div>
@@ -333,6 +344,9 @@ export default function BuyersPage() {
                       info={G.daysSinceLast}
                     />
                   </div>
+
+                  {/* ── Penfold overlap (competitors only) ── */}
+                  {profile.penfoldOverlap && !profile.penfoldOverlap.isPenfold && <PenfoldOverlapPanel ov={profile.penfoldOverlap} />}
 
                   {/* ── Company Intelligence ── */}
                   <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-4">
@@ -538,16 +552,16 @@ export default function BuyersPage() {
                                   <span className="flex items-center gap-2">
                                     <span className={cn('text-xs transition-transform inline-block', isExpanded ? 'rotate-90' : '')}>▶</span>
                                     <span className="text-zinc-100 font-semibold">{s.supplier}</span>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        router.push(`/dashboard/suppliers?select=${encodeURIComponent(s.supplier)}`)
-                                      }}
+                                    <span
+                                      role="link"
+                                      tabIndex={0}
+                                      onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/suppliers?select=${encodeURIComponent(s.supplier)}`) }}
+                                      onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); router.push(`/dashboard/suppliers?select=${encodeURIComponent(s.supplier)}`) } }}
                                       title="View supplier deep dive"
-                                      className="px-1.5 py-0.5 text-xs rounded border border-zinc-700 text-zinc-500 hover:text-blue-400 hover:border-blue-500 transition-colors flex-shrink-0"
+                                      className="px-1.5 py-0.5 text-xs rounded border border-zinc-700 text-zinc-500 hover:text-blue-400 hover:border-blue-500 transition-colors flex-shrink-0 cursor-pointer"
                                     >
                                       ↗
-                                    </button>
+                                    </span>
                                     <span className="text-zinc-600 text-xs">{s.minerals.length} min</span>
                                   </span>
                                   <span className="text-right w-20">{statusBadge(s.status)}</span>
@@ -1063,6 +1077,81 @@ export default function BuyersPage() {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Penfold overlap ────────────────────────────────────────────────────────
+function PenfoldOverlapPanel({ ov }: { ov: TraderProfile['penfoldOverlap'] }) {
+  const href = (s: string) => `/dashboard/suppliers?select=${encodeURIComponent(s)}`
+  return (
+    <div className="bg-zinc-900 border border-blue-900/50 rounded-xl p-4">
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+          Overlap with Penfold · {monthLabel(ov.window.start)}–{monthLabel(ov.window.end)}
+        </div>
+        <div className="text-[11px] text-zinc-500">
+          <span className="text-zinc-200 font-medium">{ov.sharedSuppliers}</span> of their suppliers also sold to Penfold ·{' '}
+          <span className="text-zinc-200 font-medium">{fmtUsd(ov.sharedBuyerUsd, true)}</span> ({ov.sharedPct}% of their buying) comes from shared suppliers
+        </div>
+      </div>
+      <div className="grid grid-cols-1 2xl:grid-cols-3 gap-4">
+        <div className="2xl:col-span-2">
+          <div className="text-[11px] text-zinc-500 mb-1">Suppliers selling to both them and Penfold (share of the supplier&apos;s 12-month value)</div>
+          {ov.shared.length ? (
+            <div className="max-h-64 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-zinc-900">
+                  <tr className="text-zinc-500 border-b border-zinc-800">
+                    <th className="text-left py-1.5 font-medium">Supplier</th>
+                    <th className="text-left py-1.5 font-medium">Mineral</th>
+                    <th className="text-right py-1.5 font-medium">To them</th>
+                    <th className="text-right py-1.5 font-medium">To Penfold</th>
+                    <th className="py-1.5 font-medium text-left pl-3 w-40">Split (them / us)</th>
+                    <th className="text-right py-1.5 font-medium">Last to us</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ov.shared.map((r) => (
+                    <tr key={`${r.supplier}|${r.mineral}`} className="border-b border-zinc-800/50">
+                      <td className="py-1.5 pr-2 max-w-[200px]">
+                        <Link href={href(r.supplier)} className="text-zinc-200 hover:text-blue-400 truncate block" title={r.supplier}>{r.supplier}</Link>
+                      </td>
+                      <td className="py-1.5 text-zinc-400 whitespace-nowrap">{r.mineral}</td>
+                      <td className="py-1.5 text-right tabular-nums text-amber-300/90">{fmtUsd(r.buyerUsd, true)}</td>
+                      <td className="py-1.5 text-right tabular-nums text-blue-300">{fmtUsd(r.penfoldUsd, true)}</td>
+                      <td className="py-1.5 pl-3">
+                        <div className="flex h-2 rounded overflow-hidden bg-zinc-800" title={`Them ${r.buyerSharePct}% · Penfold ${r.penfoldSharePct}% · others ${Math.max(0, 100 - r.buyerSharePct - r.penfoldSharePct).toFixed(1)}%`}>
+                          <div className="bg-amber-500" style={{ width: `${r.buyerSharePct}%` }} />
+                          <div className="bg-blue-500" style={{ width: `${r.penfoldSharePct}%` }} />
+                        </div>
+                      </td>
+                      <td className="py-1.5 text-right text-zinc-400 whitespace-nowrap">{monthLabel(r.lastPenfoldMonth)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <div className="text-xs text-zinc-600 py-6">No shared suppliers in the last 12 months.</div>}
+        </div>
+        <div>
+          <div className="text-[11px] text-zinc-500 mb-1">Relationships they started with Penfold suppliers (last 12 months)</div>
+          {ov.winsFromPenfold.length ? (
+            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+              {ov.winsFromPenfold.map((w) => (
+                <div key={`${w.supplier}|${w.mineral}`} className="rounded-lg border border-red-500/20 bg-red-500/5 px-2.5 py-1.5">
+                  <Link href={href(w.supplier)} className="text-xs text-zinc-100 font-medium hover:text-blue-400 block truncate" title={w.supplier}>{w.supplier}</Link>
+                  <div className="text-[11px] text-zinc-500">
+                    {w.mineral} · since {monthLabel(w.firstMonth)} · {fmtUsd(w.usdSince, true)} · Penfold had {w.penfoldShareBefore?.toFixed(0)}% ·{' '}
+                    <span className={w.outcome === 'Replaced' ? 'text-red-400' : 'text-amber-300'}>{w.outcome}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : <div className="text-xs text-zinc-600 py-6">None: they have not picked up any Penfold supplier in the last 12 months.</div>}
+          <Link href="/dashboard/wins" className="inline-block mt-2 text-[11px] text-blue-400 hover:text-blue-300">All competitor wins ↗</Link>
+        </div>
       </div>
     </div>
   )

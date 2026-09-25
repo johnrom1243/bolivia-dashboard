@@ -1,11 +1,15 @@
 'use client'
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { useFilters } from '@/store/filters'
+import { useSessionState } from '@/hooks/useSessionState'
 import { ExportButton } from '@/components/ExportButton'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { G } from '@/lib/glossary'
+import { monthLabel } from '@/lib/period'
+import Link from 'next/link'
+import type { PenfoldRelationship } from '@/types/data'
 import { fmtUsd, fmtTons, fmtNum, cn, mineralColor } from '@/lib/utils'
 import type { SupplierProfile, BuyerRelationship } from '@/types/data'
 import {
@@ -70,11 +74,13 @@ function SelectFromUrl({
 }: {
   onSelect: (name: string) => void
 }) {
-  const searchParams = useSearchParams()
+  const name = useSearchParams().get('select')
+  // Keep the latest callback without re-running the effect on every render
+  const cb = useRef(onSelect)
+  cb.current = onSelect
   useEffect(() => {
-    const name = searchParams.get('select')
-    if (name) onSelect(decodeURIComponent(name))
-  }, [searchParams, onSelect])
+    if (name) cb.current(name)
+  }, [name])
   return null
 }
 
@@ -82,17 +88,23 @@ function SelectFromUrl({
 export default function SuppliersPage() {
   const { queryString } = useFilters()
   const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState<string>('')
-  const [activeTab, setActiveTab] = useState<Tab>('overview')
+  // Persisted for the browser tab; a ?select= link (cross-navigation / search) wins over the stored company
+  const hasUrlSelect = () => new URLSearchParams(window.location.search).has('select')
+  const [selected, setSelected] = useSessionState<string>('sup:selected', '', { skipRestore: hasUrlSelect })
+  const [activeTab, setActiveTab] = useSessionState<Tab>('sup:tab', 'overview', { skipRestore: hasUrlSelect })
   const [expandedBuyer, setExpandedBuyer] = useState<string | null>(null)
   const [priceMineral, setPriceMineral] = useState<string>('')
   const [timelineMetric, setTimelineMetric] = useState<'usd' | 'tons'>('usd')
   const [txSort, setTxSort] = useState<{ col: string; dir: 1 | -1 }>({ col: 'date', dir: -1 })
-  const [mineralFilter, setMineralFilter] = useState<string>('')
+  const [mineralFilter, setMineralFilter] = useSessionState<string>('sup:mineral', '', { skipRestore: hasUrlSelect })
 
   const router = useRouter()
 
-  const { data: list } = useQuery<{ name: string; tons: number; usd: number; shipments: number }[]>({
+
+  const [listSort, setListSort] = useSessionState<'usd' | 'recent' | 'name'>('sup:listSort', 'usd')
+  const [penfoldOnly, setPenfoldOnly] = useSessionState<boolean>('sup:penfoldOnly', false)
+
+  const { data: list } = useQuery<{ name: string; tons: number; usd: number; shipments: number; lastDate: string; penfold: boolean }[]>({
     queryKey: ['suppliers-list', queryString],
     queryFn: () => fetch(`/api/data/suppliers${queryString}`).then((r) => r.json()),
   })
@@ -114,9 +126,12 @@ export default function SuppliersPage() {
     enabled: !!selected,
   })
 
-  const filteredList = (list ?? []).filter((s) =>
-    !search || s.name.toLowerCase().includes(search.toLowerCase()),
-  )
+  const filteredList = (list ?? [])
+    .filter((s) => (!search || s.name.toLowerCase().includes(search.toLowerCase())) && (!penfoldOnly || s.penfold))
+    .sort((a, b) =>
+      listSort === 'recent' ? b.lastDate.localeCompare(a.lastDate) || b.usd - a.usd
+      : listSort === 'name' ? a.name.localeCompare(b.name)
+      : b.usd - a.usd)
 
   const healthColor = (score: number) =>
     score >= 70 ? 'text-emerald-400' : score >= 40 ? 'text-amber-400' : 'text-red-400'
@@ -177,20 +192,38 @@ export default function SuppliersPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-xs placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
+          <div className="flex items-center justify-between gap-2 mt-2">
+            <select value={listSort} onChange={(e) => setListSort(e.target.value as 'usd' | 'recent' | 'name')}
+              className="bg-zinc-800 border border-zinc-700 rounded-md px-1.5 py-1 text-[11px] text-zinc-300">
+              <option value="usd">Largest first</option>
+              <option value="recent">Most recent</option>
+              <option value="name">A–Z</option>
+            </select>
+            <label className="flex items-center gap-1 text-[11px] text-zinc-400 cursor-pointer select-none" title="Only suppliers that have ever sold to Penfold">
+              <input type="checkbox" checked={penfoldOnly} onChange={(e) => setPenfoldOnly(e.target.checked)} className="accent-blue-500" />
+              Penfold only
+            </label>
+          </div>
           <div className="text-xs text-zinc-600 mt-1.5">{filteredList.length} suppliers</div>
         </div>
         <div className="flex-1 overflow-y-auto">
           {filteredList.map((s) => (
             <button
               key={s.name}
-              onClick={() => { setSelected(s.name); setActiveTab('overview'); setMineralFilter('') }}
+              onClick={() => {
+                setSelected(s.name); setActiveTab('overview'); setMineralFilter('')
+                if (window.location.search.includes('select=')) router.replace('/dashboard/suppliers', { scroll: false })
+              }}
               className={cn(
                 'w-full text-left px-3 py-2.5 border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors',
                 selected === s.name && 'bg-blue-900/30 border-l-2 border-l-blue-500',
               )}
             >
-              <div className="text-xs font-medium text-zinc-200 truncate">{s.name}</div>
-              <div className="text-xs text-zinc-500 mt-0.5">{fmtTons(s.tons)} · {fmtUsd(s.usd)}</div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-medium text-zinc-200 truncate">{s.name}</span>
+                {s.penfold && <span className="flex-shrink-0 px-1 rounded bg-blue-500/20 text-blue-300 text-[9px] font-bold" title="Has sold to Penfold">P</span>}
+              </div>
+              <div className="text-xs text-zinc-500 mt-0.5">{fmtTons(s.tons)} · {fmtUsd(s.usd, true)} · last {monthLabel(s.lastDate.slice(0, 7))}</div>
             </button>
           ))}
         </div>
@@ -213,9 +246,12 @@ export default function SuppliersPage() {
             {/* Header row */}
             <div className="flex items-start justify-between mb-3 flex-shrink-0">
               <div>
-                <h1 className="text-2xl font-bold text-white">{profile.name}</h1>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-2xl font-bold text-white">{profile.name}</h1>
+                  <PenfoldBadge rel={profile.penfold} />
+                </div>
                 <p className="text-zinc-400 text-sm mt-1">
-                  {profile.firstShipment} → {profile.lastShipment} · {profile.totalShipments} shipments
+                  {monthLabel(profile.firstShipment.slice(0, 7))} → {monthLabel(profile.lastShipment.slice(0, 7))} · {profile.totalShipments} shipments
                 </p>
               </div>
               <ExportButton
@@ -305,6 +341,9 @@ export default function SuppliersPage() {
                       info={G.avgDaysBetweenShipments}
                     />
                   </div>
+
+                  {/* ── Penfold relationship ── */}
+                  <PenfoldPanel rel={profile.penfold} />
 
                   {/* ── Company Intelligence ── */}
                   <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-4">
@@ -461,16 +500,16 @@ export default function SuppliersPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-sm font-semibold text-white truncate">{b.buyer}</span>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  router.push(`/dashboard/buyers?select=${encodeURIComponent(b.buyer)}`)
-                                }}
+                              <span
+                                role="link"
+                                tabIndex={0}
+                                onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/buyers?select=${encodeURIComponent(b.buyer)}`) }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); router.push(`/dashboard/buyers?select=${encodeURIComponent(b.buyer)}`) } }}
                                 title="View buyer deep dive"
-                                className="ml-1 px-1.5 py-0.5 text-xs rounded border border-zinc-700 text-zinc-500 hover:text-blue-400 hover:border-blue-500 transition-colors flex-shrink-0"
+                                className="ml-1 px-1.5 py-0.5 text-xs rounded border border-zinc-700 text-zinc-500 hover:text-blue-400 hover:border-blue-500 transition-colors flex-shrink-0 cursor-pointer"
                               >
                                 ↗
-                              </button>
+                              </span>
                               <span className={cn('px-2 py-0.5 rounded border text-xs', statusColor(b.status))}>{b.status}</span>
                               <span>{trendIcon(b.trend)}</span>
                             </div>
@@ -900,6 +939,109 @@ function ActivityHeatmap({ data }: { data: { year: number; month: number; count:
           <div key={v} className="w-4 h-4 rounded" style={{ background: `#3B82F6${Math.round(v * 255).toString(16).padStart(2, '0')}` }} />
         ))}
         <span className="text-xs text-zinc-600">More</span>
+      </div>
+    </div>
+  )
+}
+
+// ─── Penfold relationship ────────────────────────────────────────────────────
+const WATCH_STYLE: Record<string, string> = {
+  Lost: 'bg-red-500/15 text-red-400 border-red-500/40',
+  Leaking: 'bg-orange-500/15 text-orange-400 border-orange-500/40',
+  Split: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
+  Former: 'bg-violet-500/15 text-violet-300 border-violet-500/40',
+  Dormant: 'bg-zinc-700/30 text-zinc-400 border-zinc-600',
+  Exclusive: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40',
+}
+const WATCH_RANK = ['Lost', 'Leaking', 'Split', 'Former', 'Exclusive', 'Dormant']
+
+function PenfoldBadge({ rel }: { rel?: PenfoldRelationship }) {
+  if (!rel) return null
+  if (!rel.everSold) {
+    return <span className="px-2 py-0.5 rounded border text-xs border-zinc-600 text-zinc-400" title="This supplier has never shipped to Penfold">Never sold to Penfold</span>
+  }
+  const worst = [...rel.byMineral].sort((a, b) => WATCH_RANK.indexOf(a.status) - WATCH_RANK.indexOf(b.status))[0]
+  if (!worst) return null
+  return (
+    <span className={cn('px-2 py-0.5 rounded border text-xs font-medium', WATCH_STYLE[worst.status])}
+      title={`Penfold Watch status (latest ${rel.window.months} months vs prior ${rel.baseline.months})`}>
+      Penfold: {worst.status}{rel.byMineral.length > 1 ? ` (${worst.mineral})` : ''}
+    </span>
+  )
+}
+
+function PenfoldPanel({ rel }: { rel?: PenfoldRelationship }) {
+  if (!rel) return null
+  const tip = { background: CHART_THEME.tooltipBg, border: `1px solid ${CHART_THEME.tooltipBorder}`, borderRadius: 8, fontSize: 12 }
+  const hasActivity = rel.monthly.some((m) => m.penfold || m.competitors)
+  return (
+    <div className="bg-zinc-900 border border-blue-900/50 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="flex items-center text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+          Penfold relationship <InfoTooltip {...G.watchStatus} />
+        </div>
+        <div className="text-[11px] text-zinc-500">
+          {rel.everSold
+            ? <>Sold to Penfold {monthLabel(rel.firstMonth)} → {monthLabel(rel.lastMonth)} · lifetime {fmtUsd(rel.lifetimeUsd, true)} ({rel.lifetimeSharePct}% of this supplier&apos;s value)</>
+            : <>Never shipped to Penfold, a prospect. See who buys from them below.</>}
+          {' · '}<Link href="/dashboard/watch" className="text-blue-400 hover:text-blue-300">Penfold Watch ↗</Link>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
+        <div>
+          <div className="text-[11px] text-zinc-500 mb-1">Monthly USD: Penfold vs everyone else (last 24 months)</div>
+          {hasActivity ? (
+            <ResponsiveContainer width="100%" height={170}>
+              <BarChart data={rel.monthly} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.gridColor} />
+                <XAxis dataKey="month" tick={{ fill: CHART_THEME.text, fontSize: 9 }} tickFormatter={(m: string) => monthLabel(m).replace(' 20', " '")} interval={2} />
+                <YAxis tick={{ fill: CHART_THEME.text, fontSize: 9 }} tickFormatter={(v: number) => fmtUsd(v, true)} width={50} />
+                <Tooltip contentStyle={tip} labelFormatter={(m: string) => monthLabel(m)} formatter={(v: number) => fmtUsd(v, true)} />
+                <Bar dataKey="penfold" name="Penfold" stackId="a" fill="#3B82F6" />
+                <Bar dataKey="competitors" name="Other buyers" stackId="a" fill="#F59E0B" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <div className="text-xs text-zinc-600 py-8 text-center">No shipments in the last 24 months</div>}
+        </div>
+        <div>
+          <div className="text-[11px] text-zinc-500 mb-1">
+            By mineral: latest {rel.window.months} months ({monthLabel(rel.window.start)}–{monthLabel(rel.window.end)}) vs prior {rel.baseline.months}
+          </div>
+          {rel.byMineral.length ? (
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-zinc-500 border-b border-zinc-800">
+                  <th className="text-left py-1.5 font-medium">Mineral</th>
+                  <th className="text-left py-1.5 font-medium">Status</th>
+                  <th className="text-right py-1.5 font-medium">To us</th>
+                  <th className="text-right py-1.5 font-medium">To others</th>
+                  <th className="text-right py-1.5 font-medium">Share now / before</th>
+                  <th className="text-left py-1.5 pl-3 font-medium">Main competitor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rel.byMineral.map((m) => (
+                  <tr key={m.mineral} className="border-b border-zinc-800/50">
+                    <td className="py-1.5 text-zinc-200">{m.mineral}</td>
+                    <td className="py-1.5"><span className={cn('px-1.5 py-0.5 rounded border text-[11px]', WATCH_STYLE[m.status])}>{m.status}</span></td>
+                    <td className="py-1.5 text-right tabular-nums text-zinc-300">{m.penUsd ? fmtUsd(m.penUsd, true) : '—'}</td>
+                    <td className="py-1.5 text-right tabular-nums text-amber-300/90">{m.compUsd ? fmtUsd(m.compUsd, true) : '—'}</td>
+                    <td className="py-1.5 text-right tabular-nums text-zinc-300">
+                      {m.shareNow === null ? '—' : `${m.shareNow.toFixed(0)}%`} <span className="text-zinc-600">/ {m.shareBase === null ? '—' : `${m.shareBase.toFixed(0)}%`}</span>
+                    </td>
+                    <td className="py-1.5 pl-3 text-zinc-400 truncate max-w-[160px]" title={m.competitors[0]?.buyer}>
+                      {m.competitors[0] ? <>{m.competitors[0].isNew && <span className="text-blue-300">NEW · </span>}{m.competitors[0].buyer}</> : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="text-xs text-zinc-600 py-6">
+              {rel.everSold ? 'No Penfold minerals match the current mineral filter.' : 'No Penfold history for this supplier.'}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

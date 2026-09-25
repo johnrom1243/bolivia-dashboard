@@ -6,6 +6,8 @@ import { signOut } from 'next-auth/react'
 
 const NAV = [
   { href: '/dashboard', label: 'Overview', icon: '📊', exact: true },
+  { href: '/dashboard/watch', label: 'Penfold Watch', icon: '🚨' },
+  { href: '/dashboard/wins', label: 'Competitor Wins', icon: '🏁' },
   { href: '/dashboard/predator', label: 'Predator Engine', icon: '🦅' },
   { href: '/dashboard/poach', label: 'Poach Index', icon: '🎯' },
   { href: '/dashboard/loyalty', label: 'Loyalty Analysis', icon: '🤝' },

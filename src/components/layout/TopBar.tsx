@@ -1,8 +1,12 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
 import type { SearchResult } from '@/types/data'
 import { fmtUsd, fmtTons } from '@/lib/utils'
+import { monthLabel } from '@/lib/period'
+import { useFilters } from '@/store/filters'
 
 export function TopBar() {
   const { data: session } = useSession()
@@ -11,6 +15,22 @@ export function TopBar() {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const timeout = useRef<NodeJS.Timeout>()
+  const router = useRouter()
+  const setMinerals = useFilters((s) => s.setMinerals)
+
+  const { data: meta } = useQuery<{ latestMonth: string }>({
+    queryKey: ['meta'],
+    queryFn: () => fetch('/api/data/meta').then((r) => r.json()),
+    staleTime: Infinity,
+  })
+
+  function openResult(r: SearchResult) {
+    setOpen(false)
+    setQuery('')
+    if (r.type === 'Supplier') router.push(`/dashboard/suppliers?select=${encodeURIComponent(r.name)}`)
+    else if (r.type === 'Buyer') router.push(`/dashboard/buyers?select=${encodeURIComponent(r.name)}`)
+    else { setMinerals([r.name]); router.push('/dashboard') }
+  }
 
   useEffect(() => {
     if (query.length < 2) { setResults([]); setOpen(false); return }
@@ -50,6 +70,8 @@ export function TopBar() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onBlur={() => setTimeout(() => setOpen(false), 200)}
+            onFocus={() => { if (results.length) setOpen(true) }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && results[0]) openResult(results[0]); if (e.key === 'Escape') setOpen(false) }}
             placeholder="Search suppliers, buyers, minerals…"
             className="w-full pl-9 pr-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700
                        text-sm text-white placeholder-zinc-500
@@ -70,6 +92,7 @@ export function TopBar() {
                           rounded-xl shadow-2xl overflow-hidden">
             {results.map((r) => (
               <div key={`${r.type}:${r.name}`}
+                onMouseDown={(e) => { e.preventDefault(); openResult(r) }}
                 className="flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-800 cursor-pointer transition-colors">
                 <span className={`text-xs px-1.5 py-0.5 rounded-md font-medium ${BADGE_COLORS[r.type] ?? ''}`}>
                   {r.type}
@@ -80,7 +103,7 @@ export function TopBar() {
                     {fmtUsd(r.totalUsd, true)} · {fmtTons(r.totalTons)} · {r.shipmentCount} shipments
                   </div>
                 </div>
-                <div className="text-xs text-zinc-600">{r.lastActivity}</div>
+                <div className="text-xs text-zinc-600">last {monthLabel(r.lastActivity.slice(0, 7))}</div>
               </div>
             ))}
           </div>
@@ -91,7 +114,9 @@ export function TopBar() {
       <div className="flex items-center gap-3">
         <div className="text-right">
           <div className="text-sm text-white font-medium">{session?.user?.name ?? 'User'}</div>
-          <div className="text-xs text-zinc-500">{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+          <div className="text-xs text-zinc-500" title="Latest month in the dataset; all 'recent' metrics are measured from here">
+            Data through {meta?.latestMonth ? monthLabel(meta.latestMonth) : '…'}
+          </div>
         </div>
         <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold text-white">
           {(session?.user?.name ?? 'U')[0].toUpperCase()}

@@ -5,6 +5,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getData, applyFilters, parseFilters } from '@/lib/db'
 import type { SupplierProfile, BuyerRelationship, BuyerMineralDetail } from '@/types/data'
+import { isPenfold, latestMonth, monthKey, addMonths, monthRange } from '@/lib/period'
+import { computeWatch } from '@/lib/analytics/watch'
 
 export async function GET(req: NextRequest) {
   try {
@@ -17,9 +19,10 @@ export async function GET(req: NextRequest) {
 
     // No supplier selected → return list
     if (!supplierName) {
-      const map: Record<string, { tons: number; usd: number; shipments: number; lastDate: string }> = {}
+      const map: Record<string, { tons: number; usd: number; shipments: number; lastDate: string; penfold: boolean }> = {}
       for (const r of filtered) {
-        if (!map[r.supplier]) map[r.supplier] = { tons: 0, usd: 0, shipments: 0, lastDate: '' }
+        if (!map[r.supplier]) map[r.supplier] = { tons: 0, usd: 0, shipments: 0, lastDate: '', penfold: false }
+        if (isPenfold(r.buyer)) map[r.supplier].penfold = true
         map[r.supplier].tons += r.tons
         map[r.supplier].usd += r.usd
         map[r.supplier].shipments++
@@ -449,12 +452,58 @@ export async function GET(req: NextRequest) {
       competitorPresence,
       activityHeatmap,
       recentTransactions,
+      penfold: buildPenfoldRelationship(all, supplierName, filters.minerals),
     }
 
     return NextResponse.json(profile)
   } catch (err) {
     console.error('[/api/data/suppliers]', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
+
+/**
+ * Penfold relationship for one supplier, always anchored on the latest data month
+ * (ignores year filters so the status is current). Respects the mineral filter.
+ */
+function buildPenfoldRelationship(all: Parameters<typeof computeWatch>[0], supplier: string, minerals?: string[]) {
+  const refMonth = latestMonth(all)
+  const rows = all.filter((r) => r.supplier === supplier && (!minerals?.length || minerals.includes(r.mineral)))
+  const penRows = rows.filter((r) => isPenfold(r.buyer))
+  const watch = computeWatch(all, { refMonth, windowMonths: 3, baselineMonths: 12, basis: 'usd', minerals, supplierSearch: supplier })
+  const byMineral = watch.rows
+    .filter((r) => r.supplier === supplier)
+    .map(({ monthly: _monthly, severity: _severity, ...r }) => r)
+
+  const start = addMonths(refMonth, -23)
+  const mm = new Map<string, { penfold: number; competitors: number }>()
+  for (const r of rows) {
+    const m = monthKey(r.Date)
+    if (m < start) continue
+    let a = mm.get(m)
+    if (!a) { a = { penfold: 0, competitors: 0 }; mm.set(m, a) }
+    if (isPenfold(r.buyer)) a.penfold += r.usd
+    else a.competitors += r.usd
+  }
+  const monthly = monthRange(start, refMonth).map((month) => ({
+    month,
+    penfold: Math.round(mm.get(month)?.penfold ?? 0),
+    competitors: Math.round(mm.get(month)?.competitors ?? 0),
+  }))
+
+  const penMonths = penRows.map((r) => monthKey(r.Date)).sort()
+  return {
+    everSold: penRows.length > 0,
+    firstMonth: penMonths[0] ?? '',
+    lastMonth: penMonths[penMonths.length - 1] ?? '',
+    lifetimeUsd: Math.round(penRows.reduce((a, r) => a + r.usd, 0)),
+    lifetimeTons: Math.round(penRows.reduce((a, r) => a + r.tons, 0) * 10) / 10,
+    lifetimeSharePct: rows.length ? Math.round((penRows.reduce((a, r) => a + r.usd, 0) / Math.max(1, rows.reduce((a, r) => a + r.usd, 0))) * 1000) / 10 : 0,
+    refMonth,
+    window: watch.window,
+    baseline: watch.baseline,
+    byMineral,
+    monthly,
   }
 }
 

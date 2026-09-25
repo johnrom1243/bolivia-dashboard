@@ -85,7 +85,7 @@ export function calculateLoyaltyIndex(rows: DataRow[], refMs?: number): LoyaltyR
 
     // ── NEW: Cohort year ──────────────────────────────────────────────────
     const firstDate = new Date(Math.min(...group.map((r) => new Date(r.Date).getTime())))
-    const cohortYear = firstDate.getFullYear()
+    const cohortYear = firstDate.getUTCFullYear()
 
     results.push({
       supplier,

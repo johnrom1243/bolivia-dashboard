@@ -54,7 +54,12 @@ export interface KpiData {
     usdDelta: number                           // NEW: absolute $ delta
   }[]
   rollingMetrics: {
-    period: '30d' | '90d' | '180d'
+    period: '1M' | '3M' | '6M'
+    months: number
+    curStart: string
+    curEnd: string
+    prevStart: string
+    prevEnd: string
     tons: number
     usd: number
     shipments: number
@@ -171,6 +176,20 @@ export interface BuyerRelationship {
   minerals: BuyerMineralDetail[]
 }
 
+export interface PenfoldRelationship {
+  everSold: boolean
+  firstMonth: string
+  lastMonth: string
+  lifetimeUsd: number
+  lifetimeTons: number
+  lifetimeSharePct: number
+  refMonth: string
+  window: { start: string; end: string; months: number }
+  baseline: { start: string; end: string; months: number }
+  byMineral: Omit<import('@/lib/analytics/watch').WatchRow, 'monthly' | 'severity'>[]
+  monthly: { month: string; penfold: number; competitors: number }[]
+}
+
 export interface SupplierProfile {
   name: string
   totalShipments: number
@@ -227,6 +246,7 @@ export interface SupplierProfile {
     usdPerKg: number
     aduana: string
   }[]
+  penfold: PenfoldRelationship
 }
 
 // ─── Trader deep dive ──────────────────────────────────────────────────────
@@ -355,6 +375,20 @@ export interface TraderProfile {
     usdPerKg: number
     aduana: string
   }[]
+  penfoldOverlap: {
+    isPenfold: boolean
+    window: { start: string; end: string }
+    sharedSuppliers: number
+    sharedBuyerUsd: number
+    sharedPct: number
+    shared: {
+      supplier: string; mineral: string
+      buyerUsd: number; buyerTons: number; penfoldUsd: number; penfoldTons: number
+      buyerSharePct: number; penfoldSharePct: number
+      lastBuyerMonth: string; lastPenfoldMonth: string
+    }[]
+    winsFromPenfold: { supplier: string; mineral: string; firstMonth: string; usdSince: number; outcome: string; penfoldShareBefore: number | null }[]
+  }
 }
 
 // ─── Market evolution ──────────────────────────────────────────────────────

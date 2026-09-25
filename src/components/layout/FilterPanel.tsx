@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useFilters } from '@/store/filters'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
@@ -17,14 +17,21 @@ export function FilterPanel() {
     staleTime: Infinity,
   })
 
+  // Restore filters saved earlier in this browser tab (must run before the defaults below)
+  const [hydrated, setHydrated] = useState(false)
+  useEffect(() => {
+    Promise.resolve(useFilters.persist.rehydrate()).finally(() => setHydrated(true))
+  }, [])
+
   // Pre-select all minerals once on first load
   useEffect(() => {
-    if (!meta || initialized.current) return
+    if (!meta || !hydrated || initialized.current) return
     initialized.current = true
-    if (f.minerals.length === 0) {
+    const current = useFilters.getState().minerals
+    if (current.length === 0) {
       f.setMinerals(meta.minerals)
     }
-  }, [meta]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [meta, hydrated]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build year options array
   const yearOptions: number[] = []

@@ -4,7 +4,9 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getData, applyFilters, parseFilters } from '@/lib/db'
-import type { TraderProfile } from '@/types/data'
+import type { TraderProfile, DataRow } from '@/types/data'
+import { isPenfold, latestMonth, monthKey, addMonths } from '@/lib/period'
+import { computeWins } from '@/lib/analytics/wins'
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -41,7 +43,8 @@ export async function GET(req: NextRequest) {
     const totalTons = sub.reduce((a, r) => a + r.tons, 0)
     const totalUsd = sub.reduce((a, r) => a + r.usd, 0)
     const totalKg = sub.reduce((a, r) => a + r.kg, 0)
-    const allTotalUsd = all.reduce((a, r) => a + r.usd, 0)
+    // Market share is measured within the same filters (mineral, years…) as the buyer's own totals
+    const allTotalUsd = filtered.reduce((a, r) => a + r.usd, 0)
 
     const firstShipment = sub.map((r) => r.Date).sort()[0]
     const lastShipment = sub.map((r) => r.Date).sort().at(-1)!
@@ -538,6 +541,7 @@ export async function GET(req: NextRequest) {
       lotSizeDistribution,
       supplierMineralBreakdown,
       recentTransactions,
+      penfoldOverlap: buildPenfoldOverlap(all, buyerName, filters.minerals),
     }
 
     return NextResponse.json(profile)
@@ -557,4 +561,60 @@ function buildHistBuckets(sorted: number[], n: number): { bucket: string; count:
     bucket: `${(min + i * size).toFixed(1)}–${(min + (i + 1) * size).toFixed(1)}`,
     count,
   }))
+}
+
+/**
+ * How this buyer's supplier base overlaps with Penfold's, over the last 12 data
+ * months, plus relationships this buyer won from Penfold suppliers in that time.
+ */
+function buildPenfoldOverlap(all: DataRow[], buyer: string, minerals?: string[]) {
+  const refMonth = latestMonth(all)
+  const start = addMonths(refMonth, -11)
+  const rows = all.filter((r) => monthKey(r.Date) >= start && (!minerals?.length || minerals.includes(r.mineral)))
+
+  const pairs = new Map<string, { supplier: string; mineral: string; buyerUsd: number; buyerTons: number; penUsd: number; penTons: number; otherUsd: number; lastBuyer: string; lastPen: string }>()
+  for (const r of rows) {
+    const k = `${r.supplier}|${r.mineral}`
+    let p = pairs.get(k)
+    if (!p) { p = { supplier: r.supplier, mineral: r.mineral, buyerUsd: 0, buyerTons: 0, penUsd: 0, penTons: 0, otherUsd: 0, lastBuyer: '', lastPen: '' }; pairs.set(k, p) }
+    const m = monthKey(r.Date)
+    if (r.buyer === buyer) { p.buyerUsd += r.usd; p.buyerTons += r.tons; if (m > p.lastBuyer) p.lastBuyer = m }
+    else if (isPenfold(r.buyer)) { p.penUsd += r.usd; p.penTons += r.tons; if (m > p.lastPen) p.lastPen = m }
+    else p.otherUsd += r.usd
+  }
+
+  const shared = [...pairs.values()]
+    .filter((p) => p.buyerUsd > 0 && p.penUsd > 0)
+    .map((p) => {
+      const total = p.buyerUsd + p.penUsd + p.otherUsd
+      return {
+        supplier: p.supplier,
+        mineral: p.mineral,
+        buyerUsd: Math.round(p.buyerUsd),
+        buyerTons: Math.round(p.buyerTons * 10) / 10,
+        penfoldUsd: Math.round(p.penUsd),
+        penfoldTons: Math.round(p.penTons * 10) / 10,
+        buyerSharePct: total > 0 ? Math.round((p.buyerUsd / total) * 1000) / 10 : 0,
+        penfoldSharePct: total > 0 ? Math.round((p.penUsd / total) * 1000) / 10 : 0,
+        lastBuyerMonth: p.lastBuyer,
+        lastPenfoldMonth: p.lastPen,
+      }
+    })
+    .sort((a, b) => b.buyerUsd - a.buyerUsd)
+
+  const buyerTotal = [...pairs.values()].reduce((a, p) => a + p.buyerUsd, 0)
+  const sharedBuyerUsd = shared.reduce((a, p) => a + p.buyerUsd, 0)
+  const wins = computeWins(all, { refMonth, windowMonths: 12, lookbackMonths: 12, minerals })
+    .wins.filter((w) => w.buyer === buyer && w.origin === 'From Penfold')
+    .map((w) => ({ supplier: w.supplier, mineral: w.mineral, firstMonth: w.firstMonth, usdSince: w.usdSince, outcome: w.outcome, penfoldShareBefore: w.penfoldShareBefore }))
+
+  return {
+    isPenfold: isPenfold(buyer),
+    window: { start, end: refMonth },
+    sharedSuppliers: new Set(shared.map((p) => p.supplier)).size,
+    sharedBuyerUsd: Math.round(sharedBuyerUsd),
+    sharedPct: buyerTotal > 0 ? Math.round((sharedBuyerUsd / buyerTotal) * 1000) / 10 : 0,
+    shared,
+    winsFromPenfold: wins,
+  }
 }

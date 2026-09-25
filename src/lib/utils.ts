@@ -56,17 +56,28 @@ export const CHART_COLORS = [
   '#93C5FD', '#FDE68A', '#DDD6FE', '#99F6E4', '#FDBA74',
 ]
 
+// Keyed by the mineral names that actually appear in the data
 export const MINERAL_COLORS: Record<string, string> = {
-  ZINC: '#3B82F6',
-  TIN: '#10B981',
-  ANTIMONY: '#F59E0B',
-  LEAD: '#EF4444',
-  SILVER: '#8B5CF6',
-  COPPER: '#F97316',
-  BISMUTH: '#06B6D4',
+  'Zinc Ores': '#3B82F6',
+  'Lead Ores': '#EF4444',
+  'Silver Ores': '#A78BFA',
+  'Silver Bars': '#C4B5FD',
+  'Tin Ores': '#10B981',
+  'Tin Metals': '#34D399',
+  'Antimony Ores': '#F59E0B',
+  'Antimony Metals': '#FBBF24',
+  'Antimony Oxides': '#FDE68A',
+  'Copper Ores': '#F97316',
+  'Gold Ores': '#EAB308',
+  'Tungsten Ores': '#06B6D4',
+  'Lithium Carbonate': '#EC4899',
 }
 
 export function mineralColor(mineral: string): string {
-  const idx = mineral ? mineral.charCodeAt(0) % CHART_COLORS.length : 0
-  return MINERAL_COLORS[mineral?.toUpperCase()] ?? CHART_COLORS[idx]
+  if (!mineral) return CHART_COLORS[0]
+  if (MINERAL_COLORS[mineral]) return MINERAL_COLORS[mineral]
+  // Stable fallback for any new mineral: hash the full name, not just the first letter
+  let h = 0
+  for (let i = 0; i < mineral.length; i++) h = (h * 31 + mineral.charCodeAt(i)) >>> 0
+  return CHART_COLORS[h % CHART_COLORS.length]
 }

@@ -46,7 +46,7 @@ export const G = {
   // ── Rolling windows ──────────────────────────────────────────────────────
   rollingWindow: {
     term: 'Rolling Period',
-    what: 'Activity in the last N days measured from the most recent date in the dataset (not today). Compared against the identical prior period to show trend direction.',
+    what: 'Activity in the latest 1, 3 or 6 calendar months of data (the data is monthly, and "latest" means the most recent month in the dataset, not today). Compared against the same number of months immediately before.',
     calc: 'Change % = (current period − prior period) ÷ prior period × 100',
   },
 
@@ -101,7 +101,7 @@ export const G = {
   },
   shareOfWallet: {
     term: 'Share of Wallet',
-    what: "This supplier's sales to a specific buyer as a % of that buyer's total market purchases across ALL suppliers. High % = this supplier is critical to that buyer's supply chain.",
+    what: "This supplier’s sales to a specific buyer as a % of that buyer's total market purchases across ALL suppliers. High % = this supplier is critical to that buyer's supply chain.",
     calc: 'Supplier→Buyer USD ÷ Total market USD bought by that buyer × 100',
   },
   supplierStatus: {
@@ -212,6 +212,69 @@ export const G = {
   zombieGuard: {
     term: 'Zombie Guard',
     what: 'Suppliers inactive for more than 15 months automatically receive a Predator Score of 0 — they are considered out of the market.',
+  },
+  // ── Penfold Watch ────────────────────────────────────────────────────────
+  watchOverview: {
+    term: 'Penfold Watch',
+    what: 'One row per supplier × mineral that has ever sold to Penfold. Compares the selected window (latest N months of data) against a 12-month baseline right before it to spot suppliers diverting volume to competitors.',
+    calc: 'Window = latest N data months. Baseline = the 12 months before the window.',
+  },
+  watchActive: {
+    term: 'Active Penfold suppliers',
+    what: 'Suppliers that have sold to Penfold at some point AND shipped anything (to anyone) during the window.',
+  },
+  watchIntake: {
+    term: 'Penfold intake',
+    what: 'What Penfold received from its supplier base during the window, compared with the equal-length period just before.',
+  },
+  watchLeakage: {
+    term: 'Went to competitors',
+    what: 'Volume that suppliers who have sold to Penfold shipped to OTHER buyers during the window. This is the pool of material we could be winning.',
+  },
+  watchCompetitors: {
+    term: 'Who is taking our suppliers’ volume',
+    what: 'Competitor buyers ranked by how much they received from Penfold suppliers in the window. "+N new" = relationships with Penfold suppliers that started inside the window.',
+  },
+  watchByMineral: {
+    term: 'By mineral',
+    what: '"Our share" = Penfold share of what our own suppliers shipped (▲▼ = change vs baseline, in points). "Mkt" = Penfold share of ALL Bolivian exports of that mineral in the window. Click a row to filter.',
+  },
+  watchMarketTrend: {
+    term: 'Penfold share of Bolivian exports',
+    what: 'Monthly Penfold share of total export value (or tons) per mineral over the last 24 months, across all Bolivian exporters, not just our suppliers.',
+    calc: 'Penfold volume ÷ total market volume for the mineral in that month × 100',
+  },
+  watchStatus: {
+    term: 'Watch status',
+    what: 'Lost: sold to us in the baseline, nothing to us now, still shipping to others. Leaking: still sells to us but our share fell 15+ pts. Split: sells to us and to competitors. Former: sold to us before the baseline, now only to others (win-back lead). Exclusive: only to us. Dormant: shipped nothing in the window.',
+  },
+  watchShare: {
+    term: 'Our share (now / baseline)',
+    what: 'Penfold share of this supplier’s volume of this mineral in the window, then in the baseline. ▲▼ shows the change in percentage points.',
+    calc: 'To Penfold ÷ (To Penfold + To competitors) × 100',
+  },
+  watchPriceGap: {
+    term: 'Price gap',
+    what: 'How much more (+) or less (−) competitors paid per kg than Penfold for this supplier’s mineral. Red = competitors paid more, a likely reason for the switch. Declared customs values; grade differences can distort it.',
+    calc: '(Competitor avg $/kg − Penfold avg $/kg) ÷ Penfold avg $/kg × 100',
+  },
+
+  // ── Competitor Wins ──────────────────────────────────────────────────────
+  winsOverview: {
+    term: 'Competitor Wins',
+    what: 'Every new buyer ← supplier × mineral relationship that started in the window: the first month a buyer EVER received that mineral from that supplier.',
+  },
+  winsOrigin: {
+    term: 'Where the volume came from',
+    what: 'Based on the supplier’s shipments of that mineral in the 12 months before the win. New exporter: first-ever export. New mineral: supplier’s first shipment of this mineral. Returning: shipped it before, but not in the last 12 months. From Penfold: Penfold was buying this supplier’s mineral before the win. Switched: another buyer had it.',
+  },
+  winsOutcome: {
+    term: 'Outcome',
+    what: 'Added: the previous main buyer still receives volume (supplier now splits). Replaced: the previous main buyer got nothing since. New volume: nobody bought it in the prior 12 months.',
+  },
+  winsCapture: {
+    term: 'Share captured',
+    what: 'Share of everything this supplier shipped of this mineral since the win that went to the new buyer.',
   },
 } as const
 

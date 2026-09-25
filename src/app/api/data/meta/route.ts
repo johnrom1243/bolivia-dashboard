@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getData } from '@/lib/db'
+import { latestMonth } from '@/lib/period'
 
 export async function GET() {
   try {
@@ -11,6 +12,7 @@ export async function GET() {
       yearMin: Math.min(...years),
       yearMax: Math.max(...years),
       totalRows: all.length,
+      latestMonth: latestMonth(all),
     })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
